@@ -95,4 +95,7 @@ class Monitoring(Base):
     )
     monitoring_status: Mapped[str | None] = mapped_column(String)
     next_call_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # set when a doctor closes the case: calls up to this moment stop counting
+    # toward the patient's current risk/last-contact (case goes back to "chưa đánh giá").
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime)

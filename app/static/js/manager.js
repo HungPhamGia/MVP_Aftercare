@@ -56,7 +56,7 @@ async function hydrateManager() {
       const key = calISO(new Date(p.nextCall.iso));
       (MS.byDate[key] = MS.byDate[key] || []).push({
         time: p.nextCall.time, name: p.name, group: p.group, mrn: p.mrn,
-        status: p.nextCall.status === "failed" ? "failed" : "scheduled",
+        status: "scheduled",
       });
       MS.upcoming.push({ when: `${p.nextCall.date} · ${p.nextCall.time}`, name: p.name, group: p.group });
     });
@@ -263,12 +263,40 @@ function openScheduleDrawer() {
         $("#sbCustom", box).style.display = e.target.value === "custom" ? "inline-block" : "none"; compute();
       });
       ["sbTarget", "sbCustom", "sbStart", "sbCount"].forEach(id => $("#" + id, box).addEventListener("change", compute));
-      $("#sbApply", box).addEventListener("click", () => {
-        MS.sched = { scope: $("#sbScope", box).value, target: $("#sbTarget", box).value,
-                     interval: +$("#sbCustom", box).value || 7, start: $("#sbStart", box).value, count: +$("#sbCount", box).value || 5 };
-        Metrics.track("ai_schedule", "Tạo lịch gọi AI"); closeDrawer(); toast("Đã lưu lịch gọi.");
-      });
+      $("#sbApply", box).addEventListener("click", () => saveSchedule(box));
     });
+}
+
+/* Persist the schedule's next-call date to monitoring.next_call_at for the
+   targeted patients (shows in the roster + this calendar).
+   ponytail: only the *next* call is stored; the interval/count series is a
+   preview — later calls get scheduled after each one completes. */
+async function saveSchedule(box) {
+  const scope = $("#sbScope", box).value, target = $("#sbTarget", box).value;
+  const start = $("#sbStart", box).value;
+  if (!start) { toast("Chọn ngày bắt đầu."); return; }
+  const iso = `${start}T09:00:00`;
+  let targets;
+  if (scope === "Bệnh nhân cụ thể") {
+    const m = (target.match(/\(([^)]+)\)/) || [])[1];
+    targets = PATIENTS.filter(p => p.mrn === m);
+  } else if (scope === "Theo bệnh") {
+    targets = PATIENTS.filter(p => p.group === target);
+  } else {
+    targets = PATIENTS.slice();  // theo giao thức: áp dụng cho toàn bộ danh sách demo
+  }
+  if (!targets.length) { toast("Không có bệnh nhân khớp — chưa lưu lịch nào."); return; }
+  try {
+    for (const p of targets) {
+      await API.put("/records/" + encodeURIComponent(p.mrn) + "/monitoring", { next_call_at: iso });
+    }
+    MS.sched = { scope, target, interval: $("#sbInterval", box).value === "custom" ? +$("#sbCustom", box).value || 7 : +$("#sbInterval", box).value,
+                 start, count: +$("#sbCount", box).value || 5 };
+    Metrics.track("ai_schedule", "Lên lịch gọi AI · " + targets.length + " bệnh nhân");
+    closeDrawer();
+    await AfterCare.hydrate(); await hydrateManager(); renderCalendar();
+    toast(`Đã lưu lịch gọi cho ${targets.length} bệnh nhân.`);
+  } catch (e) { toast("Lưu thất bại: " + e.message); }
 }
 
 /* "⚙ Cài đặt lịch gọi" — merged popup: working hours + retry + blackout */

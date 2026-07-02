@@ -2,14 +2,25 @@
    AfterCare · appointments.js — calendar with date nav, CRUD, drag-drop
    ========================================================================= */
 
-const TODAY = "2026-07-01";          // demo "today"
+const TODAY = toISO(new Date());     // real today
 function docList() { return Array.from(new Set(PATIENTS.map(p => p.doctor))).filter(Boolean); }
+/* one re-exam per patient (keyed by ma_ho_so); date-only, persisted to lich_tai_kham */
 function mapAppts(rows) {
-  return (rows || []).map((a, i) => ({
-    id: "ap" + i, mrn: a.ma_ho_so, date: String(a.date).slice(0, 10), time: "09:00",
+  return (rows || []).map(a => ({
+    id: a.ma_ho_so, mrn: a.ma_ho_so, date: String(a.date).slice(0, 10), time: "",
     specialty: a.specialty || "Tái khám", doctor: a.bac_si_phu_trach || "—",
     note: a.chan_doan || a.phau_thuat || "",
   }));
+}
+function saveReExamAppt(mrn, date) {
+  return API.put("/records/" + encodeURIComponent(mrn) + "/lich-tai-kham", { lich_tai_kham: date });
+}
+function upsertAppt(mrn, date) {
+  const ex = AS.list.find(x => x.mrn === mrn);
+  if (ex) { ex.date = date; return; }
+  const p = getPatient(mrn);
+  AS.list.push({ id: mrn, mrn, date, time: "", specialty: "Tái khám",
+    doctor: p ? p.doctor : "—", note: p ? (p.diagnosis || "") : "" });
 }
 const DOW = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const MONTHS = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -157,48 +168,54 @@ function wireDrop() {
   $all(".ap-col").forEach(col => {
     col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop"); });
     col.addEventListener("dragleave", () => col.classList.remove("drop"));
-    col.addEventListener("drop", e => {
+    col.addEventListener("drop", async e => {
       e.preventDefault(); col.classList.remove("drop");
       const a = AS.list.find(x => x.id === AS._drag);
-      if (a && a.date !== col.dataset.date) {
-        a.date = col.dataset.date;
-        Metrics.track("appt_move", "Đổi ngày hẹn: " + apName(a.mrn));
-        toast(`Đã chuyển lịch hẹn của ${apName(a.mrn)} sang ${ddmm(a.date)}.`);
-        renderBody();
-      }
+      const to = col.dataset.date;
       AS._drag = null;
+      if (a && a.date !== to) {
+        try {
+          await saveReExamAppt(a.mrn, to);
+          a.date = to;
+          Metrics.track("appt_move", "Đổi ngày tái khám: " + apName(a.mrn));
+          toast(`Đã chuyển lịch tái khám của ${apName(a.mrn)} sang ${ddmm(to)}.`);
+          renderBody();
+        } catch (err) { toast("Lưu thất bại: " + err.message); }
+      }
     });
   });
 }
 
-function openAppt(id) {
-  const editing = !!id;
-  const a = editing ? AS.list.find(x => x.id === id)
-    : { mrn: PATIENTS[0] ? PATIENTS[0].mrn : "", date: AS.view === "day" ? AS.anchor : TODAY, time: "09:00", specialty: SPECIALTIES[0], doctor: docList()[0] || "", note: "" };
-  openDrawer(editing ? "Sửa lịch hẹn" : "Thêm lịch hẹn", `
-    ${fieldSelect("Bệnh nhân", "mrn", PATIENTS.map(p => `${p.name} (${p.mrn})`), `${apName(a.mrn)} (${a.mrn})`)}
-    ${fieldInput("Ngày", "date", "date", a.date)}
-    ${fieldInput("Giờ", "time", "time", a.time)}
-    ${fieldSelect("Chuyên khoa", "spec", SPECIALTIES, a.specialty)}
-    ${fieldSelect("Bác sĩ", "doc", docList(), a.doctor)}
-    ${fieldInput("Ghi chú", "note", "text", a.note)}
+function openAppt(mrn) {
+  const editing = !!mrn;
+  const a = editing ? AS.list.find(x => x.mrn === mrn) : null;
+  const defMrn = a ? a.mrn : (PATIENTS[0] ? PATIENTS[0].mrn : "");
+  const defDate = a ? a.date : (AS.view === "day" ? AS.anchor : TODAY);
+  openDrawer(editing ? "Sửa lịch tái khám" : "Thêm lịch tái khám", `
+    ${fieldSelect("Bệnh nhân", "mrn", PATIENTS.map(p => `${p.name} (${p.mrn})`), `${apName(defMrn)} (${defMrn})`)}
+    ${fieldInput("Ngày tái khám", "date", "date", defDate)}
+    <p class="muted-note">Mỗi bệnh nhân có một lịch tái khám.</p>
     <div class="drawer-actions">
-      <button class="btn btn-leaf btn-block" id="apSave">${editing ? "Lưu" : "Thêm lịch hẹn"}</button>
-      ${editing ? `<button class="btn btn-danger" id="apDel">Xóa</button>` : ""}
+      <button class="btn btn-leaf btn-block" id="apSave" type="button">${editing ? "Lưu" : "Thêm lịch tái khám"}</button>
+      ${editing ? `<button class="btn btn-danger" id="apDel" type="button">Xóa</button>` : ""}
     </div>`, box => {
-    $("#apSave", box).addEventListener("click", () => {
+    $("#apSave", box).addEventListener("click", async () => {
       const mrnSel = $('[name=mrn]', box).value.match(/\(([^)]+)\)/);
-      const data = {
-        id: a.id || ("a" + Date.now()), mrn: mrnSel ? mrnSel[1] : a.mrn,
-        date: $('[name=date]', box).value, time: $('[name=time]', box).value,
-        specialty: $('[name=spec]', box).value, doctor: $('[name=doc]', box).value,
-        note: $('[name=note]', box).value,
-      };
-      if (editing) Object.assign(a, data); else AS.list.push(data);
-      closeDrawer(); renderBody(); toast(editing ? "Đã lưu lịch hẹn." : "Đã thêm lịch hẹn.");
+      const m = mrnSel ? mrnSel[1] : defMrn;
+      const date = $('[name=date]', box).value;
+      if (!m || !date) { toast("Chọn bệnh nhân và ngày tái khám."); return; }
+      try {
+        await saveReExamAppt(m, date);
+        upsertAppt(m, date);
+        closeDrawer(); renderBody(); toast("Đã lưu lịch tái khám.");
+      } catch (e) { toast("Lưu thất bại: " + e.message); }
     });
-    if (editing) $("#apDel", box).addEventListener("click", () => {
-      AS.list = AS.list.filter(x => x.id !== id); closeDrawer(); renderBody(); toast("Đã xóa lịch hẹn.");
+    if (editing) $("#apDel", box).addEventListener("click", async () => {
+      try {
+        await saveReExamAppt(mrn, null);
+        AS.list = AS.list.filter(x => x.mrn !== mrn);
+        closeDrawer(); renderBody(); toast("Đã xóa lịch tái khám.");
+      } catch (e) { toast("Xóa thất bại: " + e.message); }
     });
   });
 }

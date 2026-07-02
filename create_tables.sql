@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS monitoring (
     ma_ho_so          TEXT PRIMARY KEY REFERENCES "Hồ sơ bệnh nhân"(ma_ho_so),
     monitoring_status TEXT,
     next_call_at      TIMESTAMPTZ,
+    resolved_at       TIMESTAMPTZ,   -- case closed: calls up to here stop counting toward current state
     updated_at        TIMESTAMPTZ DEFAULT now()
 );
 

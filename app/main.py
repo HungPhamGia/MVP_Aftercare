@@ -13,7 +13,7 @@ from app.models import BenhAn, CallResult, Monitoring, Question, QuestionSet
 from app.questions_gen import ai_suggest_questions, build_question_set
 from app.schemas import (
     CallDemoIn, ConversationIn, GenerateIn, GhiChuIn, MonitoringIn,
-    PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, SetVariablesIn,
+    PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, ReExamIn, SetVariablesIn,
     SetVariablesOut, TemplateIn, ThuocIn,
 )
 
@@ -45,6 +45,16 @@ def latest_call_result(db: Session, ma_ho_so: str) -> CallResult | None:
         .order_by(CallResult.id.desc())
         .limit(1)
     ).first()
+
+
+def current_call_result(db: Session, ma_ho_so: str, resolved_at) -> CallResult | None:
+    """Latest call that still counts toward the patient's *current* state.
+    A closed case (resolved_at set) discards calls made at/before it, so the
+    patient falls back to 'chưa đánh giá' until a newer call comes in."""
+    cr = latest_call_result(db, ma_ho_so)
+    if cr and resolved_at and cr.ended_at and cr.ended_at <= resolved_at:
+        return None
+    return cr
 
 
 def latest_question_set(db: Session, ma_ho_so: str) -> QuestionSet | None:
@@ -221,6 +231,9 @@ def update_monitoring(ma_ho_so: str, body: MonitoringIn, db: Session = Depends(g
         mon.monitoring_status = body.monitoring_status
     if body.next_call_at is not None:
         mon.next_call_at = body.next_call_at
+        # a newly-scheduled call re-activates a closed case, but keep resolved_at:
+        # the patient stays "chưa đánh giá" until the *new* call actually lands.
+        mon.monitoring_status = body.monitoring_status or "active"
     mon.updated_at = datetime.now()
     db.commit()
     return {
@@ -228,6 +241,35 @@ def update_monitoring(ma_ho_so: str, body: MonitoringIn, db: Session = Depends(g
         "monitoring_status": mon.monitoring_status,
         "next_call_at": mon.next_call_at,
     }
+
+
+@app.post("/records/{ma_ho_so}/close")
+def close_case(ma_ho_so: str, db: Session = Depends(get_db)):
+    """Đóng ca: ca đã xử lý xong → về trạng thái 'chưa đánh giá'. Ghi resolved_at
+    (các cuộc gọi tính đến lúc này thôi không còn là kết quả hiện tại) và xoá lịch
+    gọi kế tiếp. Lịch sử cuộc gọi vẫn giữ nguyên."""
+    get_record_or_404(db, ma_ho_so)
+    mon = db.get(Monitoring, ma_ho_so)
+    if mon is None:
+        mon = Monitoring(ma_ho_so=ma_ho_so)
+        db.add(mon)
+    now = datetime.now()
+    mon.resolved_at = now
+    mon.next_call_at = None
+    mon.monitoring_status = "resolved"
+    mon.updated_at = now
+    db.commit()
+    return {"ma_ho_so": ma_ho_so, "monitoring_status": mon.monitoring_status,
+            "resolved_at": mon.resolved_at}
+
+
+@app.put("/records/{ma_ho_so}/lich-tai-kham")
+def update_re_exam(ma_ho_so: str, body: ReExamIn, db: Session = Depends(get_db)):
+    """Đặt / đổi / xoá lịch tái khám (mỗi bệnh nhân một lịch)."""
+    rec = get_record_or_404(db, ma_ho_so)
+    rec.lich_tai_kham = body.lich_tai_kham
+    db.commit()
+    return {"ma_ho_so": ma_ho_so, "lich_tai_kham": rec.lich_tai_kham}
 
 
 @app.post("/questions")
@@ -286,8 +328,9 @@ def his_patients(db: Session = Depends(get_db)):
     rows = db.scalars(select(BenhAn)).all()
     out = []
     for r in rows:
-        cr = latest_call_result(db, r.ma_ho_so)
         mon = db.get(Monitoring, r.ma_ho_so)
+        resolved_at = mon.resolved_at if mon else None
+        cr = current_call_result(db, r.ma_ho_so, resolved_at)
         out.append({
             "ma_ho_so": r.ma_ho_so,
             "ho_ten": r.ho_ten,
@@ -303,6 +346,8 @@ def his_patients(db: Session = Depends(get_db)):
             "latest_tier": cr.tier if cr else None,
             "latest_summary": cr.summary if cr else None,
             "escalated": bool(cr.escalated) if cr else False,
+            # "đã gọi" vs "chưa gọi" for the roster's last-contact column
+            "last_call_at": cr.ended_at if cr else None,
             "next_call_at": mon.next_call_at if mon else None,
         })
     return out
@@ -331,6 +376,7 @@ def his_patient(ma_ho_so: str, db: Session = Depends(get_db)):
         "sdt_benh_nhan": r.sdt_benh_nhan,
         "sdt_nguoi_nha": r.sdt_nguoi_nha,
         "next_call_at": mon.next_call_at if mon else None,
+        "resolved_at": mon.resolved_at if mon else None,
     }
 
 
@@ -377,7 +423,8 @@ def his_notifications(db: Session = Depends(get_db)):
     groups = []
     red = []
     for r in db.scalars(select(BenhAn)).all():
-        cr = latest_call_result(db, r.ma_ho_so)
+        mon = db.get(Monitoring, r.ma_ho_so)
+        cr = current_call_result(db, r.ma_ho_so, mon.resolved_at if mon else None)
         if cr and (cr.tier == "red" or cr.escalated):
             red.append({"ma_ho_so": r.ma_ho_so,
                         "text": f"{r.ho_ten} — nguy cơ cao ({cr.summary or 'cần bác sĩ xem'})"})

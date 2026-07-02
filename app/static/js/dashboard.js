@@ -10,7 +10,8 @@ function isToday(iso) {
 function needsReview() { return PATIENTS.filter(p => p.needsReview); }
 function overdueList() { return PATIENTS.filter(p => p.overdue); }
 function upcomingCalls() {
-  return PATIENTS.filter(p => p.nextCall.status === "scheduled")
+  // scheduled but not yet past — overdue ones live in their own section below
+  return PATIENTS.filter(p => p.nextCall.status === "scheduled" && !p.overdue)
     .sort((a, b) => String(a.nextCall.iso).localeCompare(String(b.nextCall.iso)));
 }
 

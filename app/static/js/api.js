@@ -41,14 +41,16 @@ function daysBetween(fromIso, toIso) {
   const d = Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 86400000);
   return d >= 0 ? d : null;
 }
-/* monitoring next_call_at → the {date,time,status} shape the UI expects */
+/* monitoring next_call_at → the {date,time,status} shape the UI expects.
+   A call is either scheduled or not — "overdue" is a separate flag (used by the
+   work board), never a status the roster shows as "quá hạn gọi". */
 function mapNextCall(iso) {
-  if (!iso) return { date: "—", time: "", status: "none", iso: null };
+  if (!iso) return { date: "—", time: "", status: "none", iso: null, overdue: false };
   const d = new Date(iso);
   const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
   const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const overdue = d.getTime() < Date.now();
-  return { date, time, status: overdue ? "failed" : "scheduled", iso, overdue };
+  return { date, time, status: "scheduled", iso, overdue };
 }
 
 /* /his/patients row → PATIENTS[] item */
@@ -64,7 +66,7 @@ function mapRosterRow(r) {
     dischargeDate: fmtDate(r.ngay_xuat_vien), day: daysSince(r.ngay_xuat_vien),
     reExam: fmtDate(r.lich_tai_kham),
     phonePatient: r.sdt_benh_nhan || "—", phoneFamily: r.sdt_nguoi_nha || "—",
-    lastContact: r.latest_tier ? "Đã gọi" : "Chưa gọi",
+    lastContact: r.last_call_at ? "Đã gọi" : "Chưa gọi",
     reason: r.latest_summary || r.phau_thuat || "Theo dõi sau xuất viện",
     summary: r.latest_summary || r.phau_thuat || "",
     escalated: !!r.escalated,
@@ -82,8 +84,13 @@ function callAnswers(c) {
 
 /* /his/patient/{id} (+ call-results) → object case.js expects */
 function buildCaseFromApi(d, calls) {
-  const hasCalls = calls.length > 0;
-  const risk = hasCalls ? tierToRisk(calls[0].tier) : "unknown";
+  // A closed case (resolved_at) drops calls up to that moment from the *current*
+  // state → patient shows "chưa đánh giá", but the call history stays visible.
+  const resolved = d.resolved_at ? new Date(d.resolved_at).getTime() : 0;
+  const relevant = calls.filter(c => c.ended_at && new Date(c.ended_at).getTime() > resolved);
+  const hasCalls = relevant.length > 0;
+  const cur = hasCalls ? relevant[0] : null;
+  const risk = hasCalls ? tierToRisk(cur.tier) : "unknown";
   const nextCall = mapNextCall(d.next_call_at);
   const p = {
     mrn: d.ma_ho_so, name: d.ho_ten || "—",
@@ -93,10 +100,11 @@ function buildCaseFromApi(d, calls) {
     meds: d.thuoc_ke || "—", followNote: d.ghi_chu_theo_doi || "—",
     admitDate: fmtDate(d.ngay_nhap_vien), dischargeDate: fmtDate(d.ngay_xuat_vien),
     day: daysSince(d.ngay_xuat_vien), reExam: fmtDate(d.lich_tai_kham),
+    reExamIso: d.lich_tai_kham ? String(d.lich_tai_kham).slice(0, 10) : "",
     group: "Hậu phẫu", risk, doctor: d.bac_si_phu_trach || "Chưa phân công",
     phonePatient: d.sdt_benh_nhan || "—", phoneFamily: d.sdt_nguoi_nha || "—",
     reason: d.ghi_chu_theo_doi || "Theo dõi sau xuất viện",
-    summary: hasCalls ? (calls[0].summary || "") : "",
+    summary: hasCalls ? (cur.summary || "") : "",
     nextCall,
   };
   // full data per call (newest first) — each is independently viewable
@@ -117,10 +125,10 @@ function buildCaseFromApi(d, calls) {
       criteria: d.ghi_chu_theo_doi || "Theo dõi sau xuất viện",
       action: risk === "red" ? "Bác sĩ liên hệ trong vòng 1 giờ" : "Theo dõi và rà soát trong 24 giờ",
     },
-    escalationReason: (hasCalls && calls[0].escalated)
-      ? (calls[0].summary || "Trợ lý phát hiện dấu hiệu vượt ngưỡng an toàn và đã nâng mức ưu tiên.") : "",
-    // only real collected answers from the latest call (empty if no call)
-    slots: hasCalls ? callAnswers(calls[0]).map(a => ({ label: a.label, value: a.value, tone: "grey" })) : [],
+    escalationReason: (hasCalls && cur.escalated)
+      ? (cur.summary || "Trợ lý phát hiện dấu hiệu vượt ngưỡng an toàn và đã nâng mức ưu tiên.") : "",
+    // only real collected answers from the current call (empty if none / case closed)
+    slots: hasCalls ? callAnswers(cur).map(a => ({ label: a.label, value: a.value, tone: "grey" })) : [],
     trends: [],
     previousCalls,
     family: d.sdt_nguoi_nha || "—",

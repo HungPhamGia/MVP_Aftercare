@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -29,6 +29,10 @@ class ThuocIn(BaseModel):
 class MonitoringIn(BaseModel):
     monitoring_status: str | None = None
     next_call_at: datetime | None = None
+
+
+class ReExamIn(BaseModel):
+    lich_tai_kham: date | None = None  # null = clear the re-exam appointment
 
 
 class QuestionIn(BaseModel):

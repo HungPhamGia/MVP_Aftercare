@@ -13,6 +13,7 @@ Re-runnable: our 5 patients upsert (DO UPDATE), seeded calls keyed by
 session_id 'seed-%' are replaced. Run:  python -m app.seed_demo
 """
 import json
+import re
 from datetime import date, datetime
 
 from sqlalchemy import text
@@ -21,10 +22,21 @@ from app.db import engine
 
 P = '"Hồ sơ bệnh nhân"'
 
+# Demo dates were authored around 01/07/2026. Slide the whole timeline onto
+# "today" at seed time so the schedules never look stale — re-running the seed
+# always re-anchors to the current date. Relative day-gaps are preserved.
+SHIFT = date.today() - date(year=2026, month=7, day=1)
+def D(y, m, d):                 # shifted date
+    return date(y, m, d) + SHIFT
+def DT(y, m, d, h=0, mi=0):     # shifted datetime
+    return datetime(y, m, d, h, mi) + SHIFT
+def vn(d):                      # DD/MM/YYYY for display copy
+    return d.strftime("%d/%m/%Y")
+
 # --- 5 seeded patients: light, home-followable post-op cases, full fields ---
 NEW_PATIENTS = [
     dict(ma_ho_so="BA-2026-001085", ho_ten="Phạm Văn Cường", gioi_tinh="Nam", tuoi=62,
-         ngay_nhap_vien=date(2026, 6, 18), ngay_xuat_vien=date(2026, 6, 21),
+         ngay_nhap_vien=D(2026,6, 18), ngay_xuat_vien=D(2026,6, 21),
          bac_si_phu_trach="BS. Trần Quốc Việt",
          ly_do_vao_vien="Khối vùng cổ, nuốt vướng",
          chan_doan="Bướu giáp nhân lành tính (D34); hậu phẫu cắt thùy giáp",
@@ -32,9 +44,9 @@ NEW_PATIENTS = [
          phau_thuat="Cắt thùy giáp phải nội soi (18/06/2026)",
          thuoc_ke="Paracetamol 500mg khi đau; Levothyrox 50mcg/ngày (sáng, đói); Canxi + Vitamin D3 x2/ngày",
          ghi_chu_theo_doi="Theo dõi vết mổ vùng cổ, giọng nói (khàn tiếng), dấu hiệu tê tay chân hoặc co cứng (hạ canxi); uống Levothyrox buổi sáng lúc đói; gọi callbot ngày 1-3-7",
-         lich_tai_kham=date(2026, 6, 29)),
+         lich_tai_kham=D(2026,6, 29)),
     dict(ma_ho_so="BA-2026-001092", ho_ten="Nguyễn Thị Bích", gioi_tinh="Nữ", tuoi=54,
-         ngay_nhap_vien=date(2026, 6, 20), ngay_xuat_vien=date(2026, 6, 23),
+         ngay_nhap_vien=D(2026,6, 20), ngay_xuat_vien=D(2026,6, 23),
          bac_si_phu_trach="BS. Nguyễn Thanh Hương",
          ly_do_vao_vien="Rong kinh kéo dài, thiếu máu",
          chan_doan="U xơ tử cung (D25.9); hậu phẫu cắt tử cung nội soi",
@@ -42,9 +54,9 @@ NEW_PATIENTS = [
          phau_thuat="Cắt tử cung toàn phần nội soi (20/06/2026)",
          thuoc_ke="Cefuroxim 500mg x2/ngày x5 ngày; Paracetamol 500mg khi đau; Sắt (II) sulfat 1 viên/ngày",
          ghi_chu_theo_doi="Theo dõi ra huyết âm đạo bất thường, đau bụng, sốt; kiêng vận động mạnh và quan hệ 6 tuần; ăn uống đủ chất, bổ sung sắt; gọi callbot ngày 1-3-7",
-         lich_tai_kham=date(2026, 7, 6)),
+         lich_tai_kham=D(2026,7, 6)),
     dict(ma_ho_so="BA-2026-001104", ho_ten="Đặng Quốc Bảo", gioi_tinh="Nam", tuoi=41,
-         ngay_nhap_vien=date(2026, 6, 19), ngay_xuat_vien=date(2026, 6, 22),
+         ngay_nhap_vien=D(2026,6, 19), ngay_xuat_vien=D(2026,6, 22),
          bac_si_phu_trach="BS. Phạm Minh Hải",
          ly_do_vao_vien="Đau bụng quanh rốn lan xuống hố chậu phải",
          chan_doan="Viêm ruột thừa cấp (K35.8); hậu phẫu cắt ruột thừa nội soi",
@@ -52,9 +64,9 @@ NEW_PATIENTS = [
          phau_thuat="Cắt ruột thừa nội soi (19/06/2026)",
          thuoc_ke="Cefuroxim 500mg x2/ngày x5 ngày; Metronidazol 500mg x2/ngày x5 ngày; Paracetamol 500mg khi đau",
          ghi_chu_theo_doi="Theo dõi vết mổ (sưng đỏ, chảy dịch), sốt, đau tăng; nhắc uống đủ kháng sinh đúng giờ; ăn nhẹ dễ tiêu; gọi callbot ngày 1-3-5",
-         lich_tai_kham=date(2026, 6, 30)),
+         lich_tai_kham=D(2026,6, 30)),
     dict(ma_ho_so="BA-2026-001110", ho_ten="Bùi Thị Hạnh", gioi_tinh="Nữ", tuoi=72,
-         ngay_nhap_vien=date(2026, 6, 17), ngay_xuat_vien=date(2026, 6, 20),
+         ngay_nhap_vien=D(2026,6, 17), ngay_xuat_vien=D(2026,6, 20),
          bac_si_phu_trach="BS. Lý Hoàng Nam",
          ly_do_vao_vien="Ngã, đau và sưng cổ chân trái",
          chan_doan="Gãy kín mắt cá ngoài chân trái (S82.6); hậu phẫu kết hợp xương nẹp vít",
@@ -62,9 +74,9 @@ NEW_PATIENTS = [
          phau_thuat="Kết hợp xương nẹp vít mắt cá ngoài (16/06/2026)",
          thuoc_ke="Paracetamol 500mg khi đau; Meloxicam 7.5mg/ngày; Canxi + Vitamin D3 x1/ngày; Aspirin 81mg/ngày",
          ghi_chu_theo_doi="Theo dõi sưng nề, tê bì hoặc tím đầu ngón chân (dấu hiệu chèn ép), vết mổ; kê cao chân khi nghỉ; cảnh giác dấu hiệu huyết khối (đau bắp chân, sưng nóng một bên); tập vận động theo hướng dẫn; gọi callbot ngày 1-3-7",
-         lich_tai_kham=date(2026, 7, 1)),
+         lich_tai_kham=D(2026,7, 1)),
     dict(ma_ho_so="BA-2026-001126", ho_ten="Vũ Minh Tân", gioi_tinh="Nam", tuoi=38,
-         ngay_nhap_vien=date(2026, 6, 23), ngay_xuat_vien=date(2026, 6, 24),
+         ngay_nhap_vien=D(2026,6, 23), ngay_xuat_vien=D(2026,6, 24),
          bac_si_phu_trach="BS. Vũ Đình Khoa",
          ly_do_vao_vien="Búi trĩ sa, chảy máu khi đại tiện",
          chan_doan="Trĩ nội độ III (K64.2); hậu phẫu cắt trĩ",
@@ -72,7 +84,7 @@ NEW_PATIENTS = [
          phau_thuat="Cắt trĩ Longo (22/06/2026)",
          thuoc_ke="Paracetamol 500mg khi đau; Daflon 500mg x2/ngày; Thuốc mỡ bôi hậu môn; Lactulose (nhuận tràng)",
          ghi_chu_theo_doi="Theo dõi chảy máu hậu môn, đau khi đại tiện, bí tiểu; ăn nhiều chất xơ, uống đủ nước; ngâm hậu môn nước ấm 2-3 lần/ngày; gọi callbot ngày 1-3-7",
-         lich_tai_kham=date(2026, 7, 7)),
+         lich_tai_kham=D(2026,7, 7)),
 ]
 
 PHONES = {
@@ -89,16 +101,16 @@ PHONES = {
 }
 
 MONITORING = {
-    "BA-2026-001027": datetime(2026, 7, 2, 9, 0),
-    "BA-2026-001041": datetime(2026, 6, 30, 9, 30),   # overdue
-    "BA-2026-001058": datetime(2026, 7, 3, 10, 0),
-    "BA-2026-001063": datetime(2026, 6, 29, 8, 30),   # overdue
-    "BA-2026-001079": datetime(2026, 7, 2, 14, 0),
-    "BA-2026-001085": datetime(2026, 7, 2, 9, 0),
-    "BA-2026-001092": datetime(2026, 7, 4, 10, 15),
-    "BA-2026-001104": datetime(2026, 6, 29, 11, 0),   # overdue (red)
-    "BA-2026-001110": datetime(2026, 6, 30, 9, 0),    # overdue (red)
-    "BA-2026-001126": datetime(2026, 7, 5, 15, 0),
+    "BA-2026-001027": DT(2026,7, 2, 9, 0),
+    "BA-2026-001041": DT(2026,6, 30, 9, 30),   # overdue
+    "BA-2026-001058": DT(2026,7, 3, 10, 0),
+    "BA-2026-001063": DT(2026,6, 29, 8, 30),   # overdue
+    "BA-2026-001079": DT(2026,7, 2, 14, 0),
+    "BA-2026-001085": DT(2026,7, 2, 9, 0),
+    "BA-2026-001092": DT(2026,7, 4, 10, 15),
+    "BA-2026-001104": DT(2026,6, 29, 11, 0),   # overdue (red)
+    "BA-2026-001110": DT(2026,6, 30, 9, 0),    # overdue (red)
+    "BA-2026-001126": DT(2026,7, 5, 15, 0),
 }
 
 
@@ -110,7 +122,7 @@ def turn(who, txt):
 # A few patients have several dated calls (progression).
 CALLS = [
     # 001027 — recovering well, 2 calls
-    dict(mrn="BA-2026-001027", when=datetime(2026, 6, 24, 9, 10), tier="green", esc=False,
+    dict(mrn="BA-2026-001027", when=DT(2026,6, 24, 9, 10), tier="green", esc=False,
          summary="Ngày 1 sau xuất viện: vết mổ khô, đau nhẹ, không sốt, uống thuốc đủ. Ổn định.",
          answers={"Sốt": "Không", "Vết mổ": "Khô, không chảy dịch", "Đau": "Nhẹ, chịu được", "Uống thuốc": "Đủ"},
          transcript=[
@@ -122,7 +134,7 @@ CALLS = [
              turn("Chị Hồng", "Khô ráo, không chảy gì cả."),
              turn("Trợ lý", "Dạ tốt quá. Chị nhớ uống đủ kháng sinh và tránh vận động mạnh nhé. Em sẽ gọi lại vào ngày kia ạ."),
          ]),
-    dict(mrn="BA-2026-001027", when=datetime(2026, 6, 26, 9, 5), tier="green", esc=False,
+    dict(mrn="BA-2026-001027", when=DT(2026,6, 26, 9, 5), tier="green", esc=False,
          summary="Ngày 3: hết đau nhiều, ăn uống tốt, vết mổ liền tốt. Tiếp tục theo dõi.",
          answers={"Sốt": "Không", "Vết mổ": "Liền tốt", "Đau": "Gần như hết", "Ăn uống": "Bình thường"},
          transcript=[
@@ -133,7 +145,7 @@ CALLS = [
              turn("Trợ lý", "Dạ chị hồi phục rất tốt. Chị nhớ lịch tái khám ngày 30/06 nhé ạ."),
          ]),
     # 001041 — amber, 1 call
-    dict(mrn="BA-2026-001041", when=datetime(2026, 6, 25, 10, 0), tier="amber", esc=False,
+    dict(mrn="BA-2026-001041", when=DT(2026,6, 25, 10, 0), tier="amber", esc=False,
          summary="Đau hạ sườn phải tăng nhẹ khi vận động, chưa sốt, vết mổ hơi đỏ. Cần theo dõi thêm 2 ngày.",
          answers={"Sốt": "Không", "Vết mổ": "Hơi đỏ nhẹ", "Đau": "Tăng khi cử động", "Uống thuốc": "Đủ"},
          transcript=[
@@ -144,7 +156,7 @@ CALLS = [
              turn("Trợ lý", "Dạ em ghi nhận. Anh theo dõi thêm, nếu đỏ lan rộng, chảy dịch hay sốt thì báo ngay nhé. Em sẽ báo điều dưỡng theo dõi anh sát hơn ạ."),
          ]),
     # 001058 — green
-    dict(mrn="BA-2026-001058", when=datetime(2026, 6, 26, 10, 20), tier="green", esc=False,
+    dict(mrn="BA-2026-001058", when=DT(2026,6, 26, 10, 20), tier="green", esc=False,
          summary="Sản phụ ổn, sản dịch bình thường, cho con bú tốt, vết mổ khô. Ổn định.",
          answers={"Sốt": "Không", "Vết mổ": "Khô", "Sản dịch": "Bình thường", "Đau": "Nhẹ"},
          transcript=[
@@ -155,7 +167,7 @@ CALLS = [
              turn("Trợ lý", "Dạ tốt quá ạ. Chị nhớ nghỉ ngơi và kiêng vận động mạnh nhé."),
          ]),
     # 001063 — green
-    dict(mrn="BA-2026-001063", when=datetime(2026, 6, 24, 8, 40), tier="green", esc=False,
+    dict(mrn="BA-2026-001063", when=DT(2026,6, 24, 8, 40), tier="green", esc=False,
          summary="Vết mổ thoát vị ổn, không sưng đau bất thường, đi lại nhẹ nhàng. Ổn định.",
          answers={"Sốt": "Không", "Vết mổ": "Khô", "Đau": "Ít", "Đi lại": "Nhẹ nhàng được"},
          transcript=[
@@ -166,7 +178,7 @@ CALLS = [
              turn("Trợ lý", "Dạ anh nhớ tránh mang vác nặng trong vài tuần nhé ạ."),
          ]),
     # 001079 — amber (elderly, wrist)
-    dict(mrn="BA-2026-001079", when=datetime(2026, 6, 27, 14, 10), tier="amber", esc=False,
+    dict(mrn="BA-2026-001079", when=DT(2026,6, 27, 14, 10), tier="amber", esc=False,
          summary="Bệnh nhân lớn tuổi, đau vùng cổ tay nhiều về đêm, tê nhẹ ngón tay. Cần rà soát nẹp và thuốc giảm đau.",
          answers={"Sốt": "Không", "Vết mổ": "Khô", "Đau": "Nhiều về đêm", "Tê tay": "Có tê nhẹ"},
          transcript=[
@@ -177,7 +189,7 @@ CALLS = [
              turn("Trợ lý", "Dạ em ghi nhận. Bà kê cao tay khi nghỉ, em sẽ báo bác sĩ xem lại nẹp và thuốc giảm đau cho bà ạ."),
          ]),
     # 001085 — amber (thyroid: mild hoarseness + tingling)
-    dict(mrn="BA-2026-001085", when=datetime(2026, 6, 24, 9, 0), tier="amber", esc=False,
+    dict(mrn="BA-2026-001085", when=DT(2026,6, 24, 9, 0), tier="amber", esc=False,
          summary="Sau cắt thùy giáp: khàn tiếng nhẹ, thỉnh thoảng tê quanh miệng và đầu ngón tay (nghi hạ canxi nhẹ). Cần nhắc bổ sung canxi, theo dõi.",
          answers={"Sốt": "Không", "Vết mổ": "Khô", "Giọng nói": "Hơi khàn", "Tê tay/quanh miệng": "Thỉnh thoảng"},
          transcript=[
@@ -188,7 +200,7 @@ CALLS = [
              turn("Trợ lý", "Dạ đó có thể là thiếu canxi nhẹ. Chú nhớ uống canxi theo đơn nhé, nếu tê tăng hay co cứng cơ thì báo ngay. Em sẽ theo dõi thêm ạ."),
          ]),
     # 001092 — green (hysterectomy)
-    dict(mrn="BA-2026-001092", when=datetime(2026, 6, 26, 10, 30), tier="green", esc=False,
+    dict(mrn="BA-2026-001092", when=DT(2026,6, 26, 10, 30), tier="green", esc=False,
          summary="Sau cắt tử cung: ra ít dịch hồng, không sốt, đau nhẹ. Ổn định, nhắc bổ sung sắt.",
          answers={"Sốt": "Không", "Ra huyết": "Ít, màu hồng nhạt", "Đau": "Nhẹ", "Uống thuốc": "Đủ"},
          transcript=[
@@ -199,7 +211,7 @@ CALLS = [
              turn("Trợ lý", "Dạ vậy là bình thường ạ. Cô nhớ uống sắt, nghỉ ngơi, kiêng vận động mạnh nhé."),
          ]),
     # 001104 — appendectomy, progression amber -> RED (wound infection)
-    dict(mrn="BA-2026-001104", when=datetime(2026, 6, 23, 11, 0), tier="amber", esc=False,
+    dict(mrn="BA-2026-001104", when=DT(2026,6, 23, 11, 0), tier="amber", esc=False,
          summary="Ngày 1: đau vết mổ tăng nhẹ, chưa sốt, vết mổ hơi đỏ. Dặn theo dõi sát dấu hiệu nhiễm trùng.",
          answers={"Sốt": "Không", "Vết mổ": "Hơi đỏ", "Đau": "Tăng nhẹ", "Uống thuốc": "Đủ"},
          transcript=[
@@ -208,7 +220,7 @@ CALLS = [
              turn("Trợ lý", "Dạ anh theo dõi kỹ nhé, nếu vết mổ đỏ nhiều, chảy dịch hoặc sốt thì báo ngay ạ."),
              turn("Anh Bảo", "Ừ, anh để ý."),
          ]),
-    dict(mrn="BA-2026-001104", when=datetime(2026, 6, 26, 11, 15), tier="red", esc=True,
+    dict(mrn="BA-2026-001104", when=DT(2026,6, 26, 11, 15), tier="red", esc=True,
          summary="Ngày 4: sốt 38.7°C, vết mổ sưng đỏ chảy dịch đục, đau tăng. Nghi nhiễm trùng vết mổ — đã nâng cảnh báo và báo bác sĩ phụ trách.",
          answers={"Sốt": "Có, 38.7°C", "Vết mổ": "Sưng đỏ, chảy dịch đục", "Đau": "Tăng nhiều", "Chảy máu": "Không"},
          transcript=[
@@ -219,7 +231,7 @@ CALLS = [
              turn("Trợ lý", "Dạ đây là dấu hiệu nhiễm trùng vết mổ. Em xin phép nâng mức ưu tiên và báo bác sĩ phụ trách liên hệ với anh ngay ạ. Anh giữ máy giúp em nhé."),
          ]),
     # 001110 — ankle ORIF, progression amber -> RED (suspected DVT)
-    dict(mrn="BA-2026-001110", when=datetime(2026, 6, 22, 9, 0), tier="amber", esc=False,
+    dict(mrn="BA-2026-001110", when=DT(2026,6, 22, 9, 0), tier="amber", esc=False,
          summary="Ngày 2: sưng nề cổ chân, đau khi vận động, tê nhẹ. Dặn kê cao chân, theo dõi dấu hiệu chèn ép/huyết khối.",
          answers={"Sốt": "Không", "Vết mổ": "Khô", "Sưng nề": "Có", "Tê chân": "Nhẹ"},
          transcript=[
@@ -228,7 +240,7 @@ CALLS = [
              turn("Trợ lý", "Dạ bà nhớ kê cao chân khi nằm nhé. Nếu tê tăng, đầu ngón chân tím hoặc đau bắp chân thì báo ngay ạ."),
              turn("Bà Hạnh", "Ừ bà nhớ rồi."),
          ]),
-    dict(mrn="BA-2026-001110", when=datetime(2026, 6, 25, 9, 20), tier="red", esc=True,
+    dict(mrn="BA-2026-001110", when=DT(2026,6, 25, 9, 20), tier="red", esc=True,
          summary="Ngày 5: đau bắp chân trái tăng, sưng nóng một bên, khó gấp bàn chân. Nghi huyết khối tĩnh mạch sâu — đã nâng cảnh báo, báo bác sĩ.",
          answers={"Sốt": "Nhẹ", "Bắp chân": "Đau, sưng nóng một bên", "Khó thở": "Không", "Đi lại": "Rất đau"},
          transcript=[
@@ -301,6 +313,7 @@ def main():
         c.execute(text(f'ALTER TABLE {P} ADD COLUMN IF NOT EXISTS sdt_benh_nhan TEXT'))
         c.execute(text(f'ALTER TABLE {P} ADD COLUMN IF NOT EXISTS sdt_nguoi_nha TEXT'))
         c.execute(text('ALTER TABLE call_results ADD COLUMN IF NOT EXISTS transcript JSONB'))
+        c.execute(text('ALTER TABLE monitoring ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ'))
         c.execute(text("""
             CREATE TABLE IF NOT EXISTS question_templates (
                 id SERIAL PRIMARY KEY, disease TEXT, name TEXT, version TEXT,
@@ -332,6 +345,9 @@ def main():
         cols = ", ".join(["ma_ho_so"] + PATIENT_COLS)
         binds = ", ".join([":ma_ho_so"] + [f":{col}" for col in PATIENT_COLS])
         for p in NEW_PATIENTS:
+            # keep the surgery date inside the description in step with the shifted admit date
+            p["phau_thuat"] = re.sub(r"\(\d{2}/\d{2}/\d{4}\)",
+                                     f"({vn(p['ngay_nhap_vien'])})", p["phau_thuat"])
             c.execute(text(f"INSERT INTO {P} ({cols}) VALUES ({binds}) "
                            f"ON CONFLICT (ma_ho_so) DO UPDATE SET {set_clause}"), p)
 
@@ -342,10 +358,11 @@ def main():
 
         # 4) monitoring
         for mrn, when in MONITORING.items():
-            c.execute(text("""INSERT INTO monitoring (ma_ho_so, monitoring_status, next_call_at, updated_at)
-                VALUES (:mrn,'active',:when,:now)
+            c.execute(text("""INSERT INTO monitoring (ma_ho_so, monitoring_status, next_call_at, updated_at, resolved_at)
+                VALUES (:mrn,'active',:when,:now, NULL)
                 ON CONFLICT (ma_ho_so) DO UPDATE
-                  SET monitoring_status='active', next_call_at=EXCLUDED.next_call_at, updated_at=EXCLUDED.updated_at"""),
+                  SET monitoring_status='active', next_call_at=EXCLUDED.next_call_at,
+                      updated_at=EXCLUDED.updated_at, resolved_at=NULL"""),
                 dict(mrn=mrn, when=when, now=datetime.now()))
 
         # 5) call history with transcripts (idempotent by session_id 'seed-%')

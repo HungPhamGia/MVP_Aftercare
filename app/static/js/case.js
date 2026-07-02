@@ -4,6 +4,10 @@
 
 function caseId() { return new URLSearchParams(location.search).get("id") || ""; }
 
+/* date/time inputs default helpers (local — appointments.js isn't loaded here) */
+function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function isoTime(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+
 /* fallback case from the roster only (used only if the detail API call fails) */
 function buildCaseFromRoster(mrn) {
   const p0 = getPatient(mrn) || PATIENTS[0] || {};
@@ -114,7 +118,7 @@ function renderMain() {
       </div>
       <div class="cid-tags">
         <span class="pill muted">Giao thức: ${esc(C.matchedProtocol.code)}</span>
-        <span class="pill ${p.nextCall.status === "failed" ? "red" : "muted"}">Gọi kế tiếp: ${p.nextCall.status === "none" ? "chưa lên lịch" : esc(p.nextCall.date + " " + p.nextCall.time)}</span>
+        <span class="pill muted">Gọi kế tiếp: ${p.nextCall.status === "none" ? "chưa lên lịch" : esc(p.nextCall.date + " " + p.nextCall.time)}</span>
       </div>
       <dl class="facts">
         <dt>Chẩn đoán</dt><dd>${esc(p.diagnosis)}</dd>
@@ -292,33 +296,63 @@ async function saveQs() {
   } catch (e) { toast("Lưu thất bại: " + e.message); }
 }
 
+/* Lên lịch gọi AI → persists monitoring.next_call_at (shows in roster + AI calendar) */
 function actScheduleAI() {
+  const base = C.p.nextCall && C.p.nextCall.iso ? new Date(C.p.nextCall.iso) : new Date();
   openDrawer("Lên lịch gọi AI", `
-    ${fieldInput("Ngày gọi", "date", "date", "2026-06-18")}
-    ${fieldInput("Giờ gọi", "time", "time", "09:00")}
-    ${fieldSelect("Bộ câu hỏi", "tpl", ["Theo dõi hậu phẫu chung", "Theo dõi hậu sản (mổ lấy thai)", "Theo dõi sau kết hợp xương"], "Theo dõi hậu phẫu chung")}
-    ${fieldSelect("Lặp lại", "rep", ["Một lần", "Mỗi 3 ngày", "Mỗi 7 ngày", "Mỗi 14 ngày"], "Mỗi 7 ngày")}
-    <div class="drawer-actions"><button class="btn btn-leaf btn-block" onclick="saveAct('Đã lên lịch gọi AI')">Lưu lịch gọi</button></div>`);
+    ${fieldInput("Ngày gọi", "date", "date", isoDate(base))}
+    ${fieldInput("Giờ gọi", "time", "time", C.p.nextCall && C.p.nextCall.iso ? isoTime(base) : "09:00")}
+    <p class="muted-note">Lịch gọi kế tiếp sẽ hiển thị ở danh sách bệnh nhân và lịch gọi AI.</p>
+    <div class="drawer-actions"><button class="btn btn-leaf btn-block" id="aiSchedSave" type="button">Lưu lịch gọi</button></div>`,
+    box => $("#aiSchedSave", box).addEventListener("click", () =>
+      saveScheduleAI($('[name=date]', box).value, $('[name=time]', box).value)));
 }
+async function saveScheduleAI(date, time) {
+  if (!date) { toast("Chọn ngày gọi."); return; }
+  const iso = `${date}T${time || "09:00"}:00`;
+  try {
+    await API.put("/records/" + encodeURIComponent(C.p.mrn) + "/monitoring", { next_call_at: iso });
+    C.p.nextCall = mapNextCall(iso);
+    Metrics.track("ai_schedule", "Lên lịch gọi AI · " + C.p.name);
+    closeDrawer(); renderMain(); renderSide(); toast("Đã lưu lịch gọi AI.");
+  } catch (e) { toast("Lưu thất bại: " + e.message); }
+}
+
+/* Đặt lịch khám lại → persists lich_tai_kham (one re-exam per patient) */
 function actAppointment() {
+  const cur = C.p.reExamIso || isoDate(new Date());
   openDrawer("Đặt lịch khám lại", `
-    ${fieldInput("Ngày khám", "date", "date", "2026-06-18")}
-    ${fieldInput("Giờ", "time", "time", "10:00")}
-    ${fieldSelect("Chuyên khoa", "spec", SPECIALTIES, "Tim mạch")}
-    ${fieldInput("Ghi chú", "note", "text", "Tái khám theo dõi")}
-    <div class="drawer-actions"><button class="btn btn-leaf btn-block" onclick="saveAct('Đã đặt lịch khám lại')">Đặt lịch</button></div>`);
+    ${fieldInput("Ngày khám", "date", "date", cur)}
+    <p class="muted-note">Mỗi bệnh nhân có một lịch tái khám; lưu sẽ cập nhật lịch tái khám hiện tại.</p>
+    <div class="drawer-actions"><button class="btn btn-leaf btn-block" id="reexamSave" type="button">Lưu lịch tái khám</button></div>`,
+    box => $("#reexamSave", box).addEventListener("click", () =>
+      saveReExam($('[name=date]', box).value)));
 }
+async function saveReExam(date) {
+  if (!date) { toast("Chọn ngày khám."); return; }
+  try {
+    await API.put("/records/" + encodeURIComponent(C.p.mrn) + "/lich-tai-kham", { lich_tai_kham: date });
+    C.p.reExamIso = date; C.p.reExam = fmtDate(date);
+    Metrics.track("case_action", "Đặt lịch tái khám · " + C.p.name);
+    closeDrawer(); renderMain(); toast("Đã lưu lịch tái khám.");
+  } catch (e) { toast("Lưu thất bại: " + e.message); }
+}
+
+/* Đóng ca → ca đã xử lý xong: về "chưa đánh giá" + "chưa có lịch gọi" (lịch sử giữ nguyên) */
 function actClose() {
-  openDrawer("Đóng ca & phân loại lại", `
-    ${fieldSelect("Phân loại mới", "risk", ["Nguy cơ cao", "Cần theo dõi", "Ổn định"], RISK[C.p.risk].label)}
-    ${fieldSelect("Bước tiếp theo", "next", ["Tiếp tục theo dõi tự động", "Kết thúc theo dõi", "Gia hạn theo dõi"], "Tiếp tục theo dõi tự động")}
-    <label class="f"><span>Ghi chú đóng ca</span><textarea class="input" name="note" rows="3"></textarea></label>
-    <div class="drawer-actions"><button class="btn btn-dark btn-block" onclick="saveAct('Đã đóng ca', true)">Đóng ca</button></div>`);
+  openDrawer("Đóng ca", `
+    <p class="muted-note">Đóng ca nghĩa là ca này đã được xử lý xong. Bệnh nhân sẽ trở về trạng thái
+      <b>chưa đánh giá</b> và <b>chưa có lịch gọi kế tiếp</b>; lịch sử cuộc gọi vẫn được giữ lại.</p>
+    <div class="drawer-actions"><button class="btn btn-dark btn-block" id="closeCaseBtn" type="button">Đóng ca</button></div>`,
+    box => $("#closeCaseBtn", box).addEventListener("click", closeCaseNow));
 }
-function saveAct(msg, leave) {
-  Metrics.track("case_action", msg + " · " + C.p.name);
-  closeDrawer(); toast(msg + ".");
-  if (leave) setTimeout(() => location.href = "index.html", 900);
+async function closeCaseNow() {
+  try {
+    await API.post("/records/" + encodeURIComponent(C.p.mrn) + "/close");
+    Metrics.track("case_close", "Đóng ca · " + C.p.name);
+    closeDrawer(); toast("Đã đóng ca — bệnh nhân về trạng thái chưa đánh giá.");
+    setTimeout(() => location.href = "patients.html", 900);
+  } catch (e) { toast("Đóng ca thất bại: " + e.message); }
 }
 
 async function buildCaseAsync(mrn) {

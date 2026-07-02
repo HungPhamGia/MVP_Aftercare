@@ -4,7 +4,7 @@
 
 const PSTATE = {
   q: "", diagnosis: "", doctor: "", risk: { red: false, amber: false, green: false },
-  callStatus: "", overdue: false, manual: false, sort: "risk", view: "list", compact: false,
+  callStatus: "", overdue: false, sort: "risk", view: "list", compact: false,
 };
 
 function renderFilters() {
@@ -22,7 +22,6 @@ function renderFilters() {
     <label class="f"><span>Trạng thái gọi AI</span>
       <select class="select" id="fcall"><option value="">Tất cả</option>
         <option value="scheduled">Đã lên lịch</option>
-        <option value="failed">Gọi thất bại</option>
         <option value="none">Chưa lên lịch</option></select></label>
     <label class="f"><span>Sắp xếp</span>
       <select class="select" id="fsort">
@@ -36,8 +35,7 @@ function renderFilters() {
         <button class="chip" data-risk="amber"><span class="dot amber"></span>Theo dõi</button>
         <button class="chip" data-risk="green"><span class="dot green"></span>Ổn định</button>
       </div></div>
-    <label class="check"><input type="checkbox" id="foverdue"> Quá hạn theo dõi</label>
-    <label class="check"><input type="checkbox" id="fmanual"> Có theo dõi thủ công</label>`;
+    <label class="check"><input type="checkbox" id="foverdue"> Quá hạn theo dõi</label>`;
 
   $("#fq").addEventListener("input", e => { PSTATE.q = e.target.value.trim().toLowerCase(); render(); });
   $("#fdx").addEventListener("change", e => { PSTATE.diagnosis = e.target.value; render(); });
@@ -45,7 +43,6 @@ function renderFilters() {
   $("#fcall").addEventListener("change", e => { PSTATE.callStatus = e.target.value; render(); });
   $("#fsort").addEventListener("change", e => { PSTATE.sort = e.target.value; render(); });
   $("#foverdue").addEventListener("change", e => { PSTATE.overdue = e.target.checked; render(); });
-  $("#fmanual").addEventListener("change", e => { PSTATE.manual = e.target.checked; render(); });
   $all("#frisk .chip").forEach(c => c.addEventListener("click", () => {
     const r = c.dataset.risk; PSTATE.risk[r] = !PSTATE.risk[r];
     c.classList.toggle("active", PSTATE.risk[r]); render();
@@ -60,7 +57,6 @@ function applyFilters() {
     if (PSTATE.doctor && p.doctor !== PSTATE.doctor) return false;
     if (PSTATE.callStatus && p.nextCall.status !== PSTATE.callStatus) return false;
     if (PSTATE.overdue && !p.overdue) return false;
-    if (PSTATE.manual && !p.manual) return false;
     if (anyRisk && !PSTATE.risk[p.risk]) return false;
     return true;
   });
@@ -74,18 +70,11 @@ function applyFilters() {
   return rows;
 }
 
-function tagRow(p) {
-  const t = [];
-  if (p.overdue) t.push(`<span class="pill amber">Quá hạn</span>`);
-  if (p.manual) t.push(`<span class="pill info">Theo dõi thủ công</span>`);
-  return t.join(" ") || `<span class="pill muted">—</span>`;
-}
-
 function renderList(rows) {
   return `<table class="ctable ${PSTATE.compact ? "compact" : ""}">
     <thead><tr>
       <th>Bệnh nhân</th><th>Chẩn đoán</th><th>Ưu tiên</th><th>Bác sĩ</th>
-      <th>Gọi AI kế tiếp</th><th>Theo dõi</th><th>Gọi gần nhất</th><th></th>
+      <th>Gọi AI kế tiếp</th><th>Gọi gần nhất</th><th></th>
     </tr></thead><tbody>
     ${rows.map(p => `
       <tr data-mrn="${p.mrn}">
@@ -96,7 +85,6 @@ function renderList(rows) {
         <td>${esc(p.doctor)}</td>
         <td>${p.nextCall.status === "none" ? `<span class="pill muted">Chưa lên lịch</span>`
               : `${esc(p.nextCall.date)} ${esc(p.nextCall.time)} ${callPill(p.nextCall.status)}`}</td>
-        <td><span class="tag-row">${tagRow(p)}</span></td>
         <td>${esc(p.lastContact)}</td>
         <td class="row-acts"><button class="btn btn-sm" data-preview="${p.mrn}">Demo gọi</button>
           <button class="btn btn-sm" data-open="${p.mrn}">Mở</button></td>
