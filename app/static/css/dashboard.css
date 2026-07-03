@@ -10,12 +10,11 @@
 /* primary alert block — highest attention */
 .board-primary { margin-bottom: 16px; }
 
-/* secondary blocks pack tightly (masonry) — no grid gaps */
-.board-sec { column-count: 2; column-gap: 16px; }
-@media (max-width: 1024px) { .board-sec { column-count: 1; } }
+/* secondary blocks side by side: "Cuộc gọi sắp tới" | "Lịch tái khám" */
+.board-sec { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 1024px) { .board-sec { grid-template-columns: 1fr; } }
 
 .work-section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-card); overflow: hidden; }
-.board-sec .work-section { break-inside: avoid; width: 100%; margin-bottom: 16px; display: inline-block; }
 
 /* headers */
 .work-head { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-bottom: 1px solid var(--line); }

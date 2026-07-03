@@ -1,10 +1,11 @@
 /* =========================================================================
-   AfterCare · chatbot.js — "Demo cuộc gọi AI".
-   Pick a patient → the VNPT Smartbot places the call via the server BFF
-   (/bff/conversation — creds never reach the browser). The first turn seeds
-   ma_ho_so through metadata.button_variables server-side; later turns reuse
-   the same session_id. Bot text is read aloud (browser TTS); the clinician
-   answers as the patient (typing, quickreply chips, or Web Speech mic).
+   AfterCare · chatbot.js — "Demo cuộc gọi AI", speech-to-speech.
+   Pick a patient → GPT drives the call via the server BFF (/bff/conversation),
+   asking the patient's approved questions. Bot text is read aloud (SmartVoice
+   TTS /bff/tts when wired, else browser speechSynthesis); when it finishes the
+   mic opens automatically, the patient's speech is transcribed live into the
+   panel (SmartVoice STT /bff/stt or browser Web Speech) and auto-submitted on
+   silence. Typing stays as a fallback when the mic fails. Creds server-side.
    On hang-up the transcript is saved and GPT summarises + classifies the tier.
    ========================================================================= */
 
@@ -12,19 +13,47 @@ function demoId() { return new URLSearchParams(location.search).get("id") || "";
 
 const DEMO = {
   maHoSo: demoId(), patient: null, session: null, lastQ: null,
-  phase: "setup", transcript: [], answers: [],
+  phase: "setup", transcript: [], answers: [], interim: "",
   awaiting: false, ttsOn: true, startTs: 0, timerId: null, rec: null,
+  sttOn: false, ttsOnSV: false, audio: null, recCtx: null, micDead: false,
 };
+
+// Which SmartVoice services are wired on the server? (STT/TTS keyed separately.)
+API.get("/bff/voice-config").then(c => {
+  DEMO.sttOn = !!(c && c.stt); DEMO.ttsOnSV = !!(c && c.tts);
+}).catch(() => {});
 
 /* ---- helpers ---------------------------------------------------------- */
 function isBot(t) { return /trợ lý/i.test(t.who); }
-function speak(text) {
-  if (!DEMO.ttsOn || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
+function stopSpeak() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (DEMO.audio) { try { DEMO.audio.pause(); } catch (e) {} DEMO.audio = null; }
+}
+/* Speak `text`, then call onEnd exactly once (immediately when TTS is off or
+   unavailable) — onEnd is what re-opens the mic for the speech-to-speech loop. */
+function speak(text, onEnd) {
+  let called = false;
+  const done = () => { if (!called) { called = true; if (onEnd) onEnd(); } };
+  if (!DEMO.ttsOn || !text) { done(); return; }
+  stopSpeak();
+  if (DEMO.ttsOnSV) {
+    // SmartVoice TTS: server returns a public wav link; play it directly.
+    API.post("/bff/tts", { text }).then(r => {
+      if (r && r.audio_link && DEMO.ttsOn && DEMO.phase === "calling") {
+        DEMO.audio = new Audio(r.audio_link);
+        DEMO.audio.onended = done;
+        DEMO.audio.onerror = done;
+        DEMO.audio.play().catch(done);
+      } else done();
+    }).catch(done);
+    return;
+  }
+  if (!window.speechSynthesis) { done(); return; }
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "vi-VN"; u.rate = 1;
   const v = (window.speechSynthesis.getVoices() || []).find(x => /vi/i.test(x.lang));
   if (v) u.voice = v;
+  u.onend = done; u.onerror = done;
   window.speechSynthesis.speak(u);
 }
 function fmtTimer(s) {
@@ -42,9 +71,7 @@ function renderSetup() {
       <label class="f"><span>Bệnh nhân</span>
         <select class="select" id="demoPick"><option value="">— Chọn bệnh nhân —</option>${opts}</select></label>
       <label class="check"><input type="checkbox" id="demoTts" checked> Bot đọc câu hỏi thành tiếng</label>
-      <div style="margin-top:16px">
-        <button class="btn btn-leaf" id="demoStart" disabled>▶ Bắt đầu demo cuộc gọi</button>
-      </div>
+      <button class="btn btn-leaf" id="demoStart" disabled>▶ Bắt đầu demo cuộc gọi</button>
     </section>`;
   const pick = $("#demoPick");
   if (getPatient(DEMO.maHoSo)) pick.value = DEMO.maHoSo;
@@ -60,6 +87,7 @@ async function startCall(mrn) {
   DEMO.patient = getPatient(mrn);
   DEMO.ttsOn = $("#demoTts") ? $("#demoTts").checked : true;
   DEMO.transcript = []; DEMO.answers = []; DEMO.awaiting = false; DEMO.lastQ = null;
+  DEMO.interim = ""; DEMO.micDead = false;
   DEMO.session = crypto.randomUUID ? crypto.randomUUID() : "s" + Date.now() + Math.random();
   history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(mrn));
 
@@ -82,7 +110,6 @@ function renderCall() {
           <div class="ph-name">${esc(p.name || "")}</div>
           <div class="ph-sub">${esc(p.mrn || "")}${p.surgery ? " · " + esc(p.surgery) : ""}</div>
           <div class="ph-timer" id="phTimer">00:00</div>
-          <div class="ph-caption" id="phCaption">Đang kết nối…</div>
           <div class="ph-controls">
             <button class="ph-btn mic" id="micBtn" type="button" title="Nói (giữ để trả lời)">🎙</button>
             <button class="ph-btn end" id="endBtn" type="button" title="Kết thúc cuộc gọi">✕</button>
@@ -93,10 +120,9 @@ function renderCall() {
       <section class="transcript-panel card">
         <div class="tp-head"><span class="live-dot"></span> Bản ghi trực tiếp</div>
         <div id="tpLog" class="tp-log" aria-live="polite"></div>
-        <div id="qrRow" class="tp-quick"></div>
         <form id="answerForm" class="tp-input">
           <input id="answerText" class="input" type="text" autocomplete="off"
-                 placeholder="Trả lời thay bệnh nhân (hoặc bấm 🎙 để nói)…">
+                 placeholder="Gõ câu trả lời (dự phòng khi micro lỗi)…">
           <button class="btn btn-leaf" type="submit">Gửi</button>
         </form>
       </section>
@@ -110,20 +136,34 @@ function renderCall() {
 function renderTranscript() {
   const log = $("#tpLog");
   if (!log) return;
-  log.innerHTML = DEMO.transcript.map(t =>
+  // Live interim bubble: what the patient is saying into the mic right now.
+  const who = DEMO.patient ? DEMO.patient.name : "Bệnh nhân";
+  const interim = DEMO.interim
+    ? `<div class="chat-msg user interim"><span class="spk">${esc(who)} 🎙</span>${esc(DEMO.interim)}</div>`
+    : "";
+  log.innerHTML = (DEMO.transcript.map(t =>
     `<div class="chat-msg ${isBot(t) ? "bot" : "user"}"><span class="spk">${esc(t.who)}</span>${esc(t.text)}</div>`
-  ).join("") || `<div class="chat-msg sys">Cuộc gọi đang bắt đầu…</div>`;
+  ).join("") + interim) || `<div class="chat-msg sys">Cuộc gọi đang bắt đầu…</div>`;
   log.scrollTop = log.scrollHeight;
 }
 
+function setInterim(t) { DEMO.interim = t || ""; renderTranscript(); }
+
 function botTurn(text, isQuestion) {
-  DEMO.transcript.push({ who: "Trợ lý", text });
+  DEMO.transcript.push({ who: "Trợ lý", text }); // bot lines live in the chat panel only
   renderTranscript();
-  const cap = $("#phCaption"); if (cap) cap.textContent = text;
-  speak(text);
   DEMO.awaiting = !!isQuestion;
   const st = $("#phStatus");
   if (st) st.textContent = isQuestion ? "Đang chờ bệnh nhân trả lời…" : "Đang gọi…";
+  // Speech-to-speech: once the bot finishes talking, open the mic.
+  speak(text, () => { if (isQuestion) startListening(); });
+}
+
+/* Auto-open the mic (SmartVoice or Web Speech) while an answer is expected. */
+function startListening() {
+  if (DEMO.phase !== "calling" || !DEMO.awaiting || DEMO.micDead) return;
+  if (DEMO.rec || DEMO.recCtx) return; // already listening
+  DEMO.sttOn ? svStartMic() : webStartMic();
 }
 
 /* Send one turn to the Smartbot BFF and render its reply. */
@@ -140,40 +180,67 @@ async function botAsk(text, firstTurn) {
     return;
   }
   if (DEMO.phase !== "calling") return; // hung up while waiting
-  if (r.text) { DEMO.lastQ = r.text; botTurn(r.text, true); }
-  renderQuick(r.quickreplies);
+  if (r.text) { DEMO.lastQ = r.text; botTurn(r.text, !r.done && !r.handoff); }
   if (r.handoff) {
     botTurn("⚠ Cuộc gọi được chuyển cho điều dưỡng trực.", false);
     setTimeout(() => endCall(), 2200);
+  } else if (r.done) {
+    // Bot said goodbye (refusal, wrong number, or all questions done) → hang up.
+    const st = $("#phStatus"); if (st) st.textContent = "Cuộc gọi kết thúc…";
+    setTimeout(() => endCall(), 3500);
   }
-}
-
-function renderQuick(opts) {
-  const row = $("#qrRow");
-  if (!row) return;
-  row.innerHTML = (opts || []).map(o => `<button type="button" class="chip">${esc(o)}</button>`).join("");
-  row.querySelectorAll(".chip").forEach(b =>
-    b.addEventListener("click", () => submitAnswer(b.textContent)));
 }
 
 function submitAnswer(text) {
   text = (text || "").trim();
   if (!text || DEMO.phase !== "calling" || !DEMO.awaiting) return;
+  stopMics(); // typed answers may arrive while the mic is open
+  DEMO.interim = "";
   DEMO.transcript.push({ who: DEMO.patient ? DEMO.patient.name : "Bệnh nhân", text });
   DEMO.answers.push({ question: DEMO.lastQ, answer: text });
   DEMO.awaiting = false;
   const inp = $("#answerText"); if (inp) inp.value = "";
-  renderQuick([]);
   renderTranscript();
   botAsk(text, false);
 }
 
-/* ---- mic (Web Speech STT if available; SmartVoice later) -------------- */
+/* Silently drop any open mic without submitting what it heard. */
+function stopMics() {
+  if (DEMO.rec) {
+    const rec = DEMO.rec; DEMO.rec = null;
+    try { (rec.abort || rec.stop).call(rec); } catch (e) {}
+    setMic(false);
+  }
+  if (DEMO.recCtx) {
+    const r = DEMO.recCtx; DEMO.recCtx = null;
+    try {
+      r.proc.disconnect(); r.source.disconnect(); r.sink.disconnect();
+      r.stream.getTracks().forEach(t => t.stop()); r.ctx.close();
+    } catch (e) {}
+    setMic(false);
+  }
+}
+
+/* ---- mic: SmartVoice STT when wired, else browser Web Speech ---------- */
 function setMic(on) { const b = $("#micBtn"); if (b) b.classList.toggle("on", on); }
+// Manual override: tap = talk now / stop; the loop reopens it after each turn.
 function toggleMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast("Trình duyệt chưa hỗ trợ nhận giọng nói — hãy gõ câu trả lời."); $("#answerText").focus(); return; }
   if (DEMO.rec) { DEMO.rec.stop(); return; }
+  if (DEMO.recCtx) { svStopAndSend(); return; }
+  DEMO.micDead = false; // user insists — retry even after an earlier failure
+  DEMO.sttOn ? svStartMic() : webStartMic();
+}
+
+/* Browser Web Speech STT (fallback when SmartVoice creds aren't set).
+   Live words go to the interim transcript bubble; auto-submits when the
+   patient stops talking, re-arms on silence so the line stays open. */
+function webStartMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    DEMO.micDead = true;
+    toast("Trình duyệt chưa hỗ trợ nhận giọng nói — hãy gõ câu trả lời.");
+    $("#answerText").focus(); return;
+  }
   const rec = new SR();
   rec.lang = "vi-VN"; rec.interimResults = true; rec.continuous = false;
   DEMO.rec = rec; setMic(true);
@@ -181,15 +248,99 @@ function toggleMic() {
   rec.onresult = e => {
     let interim = "";
     for (const r of e.results) { if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript; }
-    $("#answerText").value = (finalText + " " + interim).trim();
+    setInterim((finalText + " " + interim).trim());
   };
-  rec.onerror = () => { setMic(false); DEMO.rec = null; };
+  rec.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      DEMO.micDead = true;
+      toast("Không truy cập được micro — hãy gõ câu trả lời.");
+    }
+  };
   rec.onend = () => {
+    if (DEMO.rec !== rec) return; // aborted by stopMics()
     setMic(false); DEMO.rec = null;
-    const t = ($("#answerText").value || "").trim();
+    const t = (finalText || DEMO.interim || "").trim();
+    setInterim("");
     if (t) submitAnswer(t);
+    else startListening(); // heard nothing — keep the line open
   };
   rec.start();
+}
+
+// ponytail: RMS gate + trailing-silence window; tune if auto-stop misfires per mic.
+const SV_RMS = 0.015, SV_SILENCE_MS = 1800;
+
+/* SmartVoice STT: record mic as PCM16 mono WAV in-browser (no libs), POST to
+   /bff/stt which forwards to VNPT. Auto-stops after trailing silence once the
+   patient has spoken (tap 🎙 also stops & sends immediately). */
+async function svStartMic() {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { DEMO.micDead = true; toast("Không truy cập được micro — hãy gõ câu trả lời."); return; }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const sink = ctx.createGain(); sink.gain.value = 0; // silence: no mic echo
+  const chunks = [];
+  proc.onaudioprocess = e => {
+    const buf = e.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(buf));
+    const r = DEMO.recCtx; if (!r) return;
+    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    if (Math.sqrt(sum / buf.length) > SV_RMS) { r.spoke = true; r.lastVoice = Date.now(); }
+    else if (r.spoke && Date.now() - r.lastVoice > SV_SILENCE_MS) svStopAndSend();
+  };
+  source.connect(proc); proc.connect(sink); sink.connect(ctx.destination);
+  DEMO.recCtx = { stream, ctx, source, proc, sink, chunks, rate: ctx.sampleRate,
+                  spoke: false, lastVoice: 0 };
+  setMic(true);
+  setInterim("🎙 Đang nghe…");
+}
+
+async function svStopAndSend() {
+  const r = DEMO.recCtx; if (!r) return;
+  DEMO.recCtx = null; setMic(false);
+  r.proc.disconnect(); r.source.disconnect(); r.sink.disconnect();
+  r.stream.getTracks().forEach(t => t.stop());
+  const wav = encodeWav(r.chunks, r.rate);
+  r.ctx.close();
+  if (!wav.byteLength) { setInterim(""); return; }
+
+  setInterim("Đang nhận dạng giọng nói…");
+  const fd = new FormData();
+  fd.append("audio", new Blob([wav], { type: "audio/wav" }), "answer.wav");
+  fd.append("client_session", DEMO.session || "sess");
+  try {
+    const resp = await fetch("/bff/stt", { method: "POST", body: fd });
+    if (!resp.ok) throw new Error("STT " + resp.status);
+    const t = ((await resp.json()).text || "").trim();
+    setInterim("");
+    if (t) submitAnswer(t);
+    else { toast("Không nghe rõ, thử lại hoặc gõ câu trả lời."); startListening(); }
+  } catch (e) {
+    setInterim("");
+    toast("Lỗi nhận dạng giọng nói: " + e.message);
+    startListening(); // keep the call alive; typing still works
+  }
+}
+
+/* Float32 PCM chunks → 16-bit mono WAV bytes at the given sample rate. */
+function encodeWav(chunks, rate) {
+  let len = 0; for (const c of chunks) len += c.length;
+  const buf = new ArrayBuffer(44 + len * 2);
+  const view = new DataView(buf);
+  const wstr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  wstr(0, "RIFF"); view.setUint32(4, 36 + len * 2, true); wstr(8, "WAVE");
+  wstr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  wstr(36, "data"); view.setUint32(40, len * 2, true);
+  let off = 44;
+  for (const c of chunks) for (let i = 0; i < c.length; i++, off += 2) {
+    const s = Math.max(-1, Math.min(1, c[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buf;
 }
 
 /* ---- timer ------------------------------------------------------------ */
@@ -207,8 +358,9 @@ async function endCall() {
   if (DEMO.phase === "ended") return;
   DEMO.phase = "ended";
   stopTimer();
-  if (DEMO.rec) { try { DEMO.rec.stop(); } catch (e) {} }
-  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  stopMics();
+  DEMO.interim = "";
+  stopSpeak();
 
   $("#demoRoot").innerHTML = `<section class="card demo-result"><h2>Đang lưu & phân tích cuộc gọi…</h2>
     <p class="muted-note">Hệ thống đang tóm tắt và phân loại mức nguy cơ.</p></section>`;

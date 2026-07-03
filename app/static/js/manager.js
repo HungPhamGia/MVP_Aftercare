@@ -31,7 +31,8 @@ const MS = {
 };
 
 /* Build MS from live data (templates/rules/performance/notifications + the
-   week grid from monitoring next-call times). Edits stay client-side. */
+   week grid from monitoring next-call times). Reschedules persist via
+   PUT /records/{mrn}/monitoring; other edits stay client-side. */
 async function hydrateManager() {
   const [tpls, rules, perf, notifs] = await Promise.all([
     AfterCare.templates(), AfterCare.rules(), AfterCare.performance(), AfterCare.notifications(),
@@ -162,7 +163,7 @@ function renderCalBody() {
         <h4>${d} <span class="muted-note">${calDDMM(dates[i])}</span></h4>
         ${(MS.byDate[dates[i]] || []).map((c, k) => callChip(c, dates[i], k)).join("")}</div>`).join("")}
     </div>
-    <p class="muted-note" style="margin-top:10px">Kéo–thả để đổi ngày gọi.</p>`;
+    <p class="muted-note" style="margin-top:10px">Bấm vào cuộc gọi để sửa ngày/giờ · kéo–thả để đổi ngày.</p>`;
     wireDnD();
   } else if (MS.calView === "day") {
     const list = MS.byDate[MS.calAnchor] || [];
@@ -199,10 +200,40 @@ function renderMonth() {
     <p class="muted-note" style="margin-top:10px">Tháng ${m}/${y} · ngày gạch chéo là ngày nghỉ/không gọi.</p>`;
 }
 
+/* persist a call's new date/time (same endpoint as case.html's "Lên lịch gọi AI") */
+async function rescheduleCall(c, date, time) {
+  try {
+    await API.put("/records/" + encodeURIComponent(c.mrn) + "/monitoring", { next_call_at: `${date}T${time || "09:00"}:00` });
+    Metrics.track("ai_reschedule", "Đổi lịch gọi: " + c.name);
+    await AfterCare.hydrate(); await hydrateManager(); renderCalendar();
+    toast(`Đã đổi lịch gọi của ${c.name} sang ${calDDMMYY(date)} ${time || ""}.`);
+  } catch (e) { toast("Lưu thất bại: " + e.message); }
+}
+
+/* click a calendar chip → edit that call's date/time */
+function openChipEditor(c, dateIso) {
+  openDrawer("Sửa lịch gọi · " + c.name, `
+    ${fieldInput("Ngày gọi", "date", "date", dateIso)}
+    ${fieldInput("Giờ gọi", "time", "time", c.time)}
+    <div class="drawer-actions">
+      <button class="btn btn-leaf btn-block" id="ceSave">Lưu lịch gọi</button>
+      <button class="btn btn-block" id="ceOpen" style="margin-top:8px">Mở ca</button>
+    </div>`,
+    box => {
+      $("#ceSave", box).addEventListener("click", () => {
+        const d = $('[name=date]', box).value;
+        if (!d) { toast("Chọn ngày gọi."); return; }
+        closeDrawer(); rescheduleCall(c, d, $('[name=time]', box).value);
+      });
+      $("#ceOpen", box).addEventListener("click", () => openCase(c.mrn));
+    });
+}
+
 function wireDnD() {
   $all(".cal-chip").forEach(chip => {
     chip.addEventListener("dragstart", () => { MS._drag = { date: chip.dataset.date, idx: +chip.dataset.idx }; chip.classList.add("dragging"); });
     chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+    chip.addEventListener("click", () => openChipEditor(MS.byDate[chip.dataset.date][+chip.dataset.idx], chip.dataset.date));
   });
   $all(".cal-col").forEach(col => {
     col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop"); });
@@ -210,15 +241,11 @@ function wireDnD() {
     col.addEventListener("drop", e => {
       e.preventDefault(); col.classList.remove("drop");
       if (!MS._drag) return;
+      const item = (MS.byDate[MS._drag.date] || [])[MS._drag.idx];
       const to = col.dataset.date, from = MS._drag.date;
-      if (to === from) return;
-      const item = MS.byDate[from].splice(MS._drag.idx, 1)[0];
-      (MS.byDate[to] = MS.byDate[to] || []).push(item);
-      MS.byDate[to].sort((a, b) => a.time.localeCompare(b.time));
       MS._drag = null;
-      Metrics.track("ai_reschedule", "Đổi ngày gọi: " + item.name);
-      toast(`Đã chuyển cuộc gọi của ${item.name} sang ${calDDMMYY(to)}.`);
-      renderCalBody();
+      if (!item || to === from) return;
+      rescheduleCall(item, to, item.time);
     });
   });
 }

@@ -1,9 +1,15 @@
 /* AfterCare · chatbot.css — Demo cuộc gọi AI (phone + live transcript) */
 
 /* ---- setup ------------------------------------------------------------ */
-.demo-setup { max-width: 560px; display: flex; flex-direction: column; gap: 12px; }
+.demo-setup {
+  max-width: 440px; margin: 7vh auto 0; padding: 30px 34px 34px;
+  display: flex; flex-direction: column; gap: 14px; text-align: center;
+}
 .demo-setup h2 { margin: 0; }
-.demo-setup .f { max-width: 420px; }
+.demo-setup .muted-note { margin: 0; }
+.demo-setup .f { text-align: left; }
+.demo-setup .check { justify-content: center; padding: 0; }
+.demo-setup .btn { width: 100%; justify-content: center; margin-top: 6px; }
 
 /* ---- in-call layout --------------------------------------------------- */
 .demo-call { display: flex; gap: 20px; align-items: stretch; }
@@ -34,12 +40,8 @@
 .ph-name { font-size: 21px; font-weight: 700; }
 .ph-sub { font-size: 12.5px; opacity: .8; margin-top: 4px; padding: 0 6px; }
 .ph-timer { font-size: 15px; opacity: .9; margin: 14px 0; font-variant-numeric: tabular-nums; }
-.ph-caption {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  font-size: 14px; line-height: 1.5; opacity: .95; padding: 8px 4px;
-  background: rgba(255,255,255,.08); border-radius: 14px; margin: 4px 0 18px; width: 100%;
-}
-.ph-controls { display: flex; gap: 26px; justify-content: center; padding-bottom: 6px; }
+/* no caption on the phone — bot lines only appear in the transcript panel */
+.ph-controls { display: flex; gap: 26px; justify-content: center; padding-bottom: 6px; margin-top: auto; }
 .ph-btn {
   width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer;
   font-size: 22px; color: #fff; display: flex; align-items: center; justify-content: center;
@@ -59,9 +61,6 @@
   flex: 1; min-height: 360px; max-height: 60vh; overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px; padding: 4px 2px;
 }
-.tp-quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.tp-quick:empty { display: none; }
-.tp-quick .chip { cursor: pointer; }
 .tp-input { display: flex; gap: 8px; margin-top: 12px; }
 .tp-input .input { flex: 1; }
 
@@ -72,6 +71,7 @@
 .chat-msg.user { align-self: flex-end; background: var(--leaf, #2f855a); color: #fff; border-bottom-right-radius: 4px; }
 .chat-msg.user .spk { color: #fff; }
 .chat-msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 13px; }
+.chat-msg.interim { opacity: .65; font-style: italic; } /* live mic transcript, not yet final */
 
 /* ---- result ----------------------------------------------------------- */
 .demo-result { max-width: 640px; }

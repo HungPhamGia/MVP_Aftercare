@@ -84,13 +84,6 @@ function renderBoard(appts) {
     actions: [{ act: "open", label: "Mở ca" }],
   }));
 
-  const overdueAll = overdueList();
-  const overdue = overdueAll.slice(0, 3).map(p => workItem({
-    mrn: p.mrn, tone: "amber", title: p.name, meta: `${p.surgery} · ngày ${p.day}`,
-    reason: "Quá hạn cuộc gọi theo dõi", time: `${p.nextCall.date} ${p.nextCall.time}`,
-    actions: [{ act: "call", label: "Gọi lại" }, { act: "open", label: "Mở ca" }],
-  }));
-
   const apUp = appts.slice(0, 3).map(a => workItem({
     mrn: a.ma_ho_so, tone: "green", title: a.ho_ten, meta: a.specialty, reason: a.chan_doan,
     time: fmtDate(a.date), actions: [{ act: "appts", label: "Xem lịch" }],
@@ -99,8 +92,6 @@ function renderBoard(appts) {
   $("#boardSec").innerHTML =
     section({ title: "Cuộc gọi sắp tới", tone: "info", icon: "☎", items: calls, total: callsAll.length,
               link: "manager.html#calendar", empty: "Không có cuộc gọi sắp tới." }) +
-    section({ title: "Theo dõi quá hạn", tone: "amber", icon: "⏱", items: overdue, total: overdueAll.length,
-              link: "patients.html", empty: "Không có ca quá hạn." }) +
     section({ title: "Lịch tái khám", tone: "green", icon: "◷", items: apUp, total: appts.length,
               link: "appointments.html", empty: "Chưa có lịch tái khám." });
 

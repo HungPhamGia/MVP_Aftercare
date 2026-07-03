@@ -72,6 +72,10 @@ class ConversationIn(BaseModel):
     first_turn: bool = False
 
 
+class TtsIn(BaseModel):
+    text: str
+
+
 class CallDemoIn(BaseModel):
     ma_ho_so: str
     transcript: list[dict[str, Any]] = []

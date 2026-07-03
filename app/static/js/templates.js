@@ -92,7 +92,7 @@ function renderQList() {
   $("#qList").innerHTML = (t.questions || []).map((q, i) => `
     <div class="q-row" data-i="${i}">
       <div class="q-main">
-        <input class="input q-text" data-qtext="${i}" value="${esc(q.text)}">
+        <textarea class="input q-text" data-qtext="${i}" rows="2">${esc(q.text)}</textarea>
         <div class="q-flags">
           <span class="req-pill ${q.required ? "req" : "opt"}" data-req="${i}">${q.required ? "Bắt buộc" : "Tùy chọn"}</span>
         </div>

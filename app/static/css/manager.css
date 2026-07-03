@@ -93,11 +93,17 @@
 .tpl-list .tpl-item .n { font-size: 14.5px; font-weight: 700; margin: 2px 0; }
 .tpl-list .tpl-item .meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 
-.q-row { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: var(--panel); }
+/* 2 columns: question (flexible) + actions — the old auto 1fr auto left the
+   question in the shrunken auto column, so the box rendered tiny. */
+.q-row { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: var(--panel); }
 .q-row.dragging { opacity: .4; }
 .q-row.off { opacity: .55; }
 .q-handle { cursor: grab; color: var(--faint); font-size: 16px; padding-top: 2px; user-select: none; }
-.q-main .q-text { font-size: 14px; }
+.q-main .q-text {
+  width: 100%; font-size: 14px; line-height: 1.5;
+  resize: vertical; min-height: 48px;
+  field-sizing: content; /* auto-grow with the question (Chrome 123+; others keep min-height) */
+}
 .q-main .q-flags { display: flex; gap: 8px; margin-top: 7px; flex-wrap: wrap; align-items: center; }
 .q-branch { margin-top: 8px; padding: 8px 10px; background: var(--amber-soft); border-radius: 8px; font-size: 12.5px; color: var(--amber-ink); }
 .q-actions { display: flex; gap: 6px; align-items: center; }

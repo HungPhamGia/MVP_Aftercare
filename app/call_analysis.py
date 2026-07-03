@@ -42,20 +42,33 @@ def _heuristic(transcript: list[dict]) -> dict:
     said = [t.get("text", "") for t in transcript if _is_patient(t) and t.get("text")]
     body = " ".join(said)[:280]
     summary = f"Bệnh nhân cho biết: {body} → phân loại {label}."
-    return {"summary": summary, "tier": tier, "escalated": tier == "red", "source": "heuristic"}
+    return {"summary": summary, "tier": tier, "escalated": tier == "red",
+            "extracted": {}, "source": "heuristic"}
 
 
-def _gpt(transcript: list[dict]) -> dict:
+def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY, max_retries=0, timeout=8)
+    # 20s: summary + per-variable extraction over a whole call transcript can
+    # exceed the old 8s, and a timeout silently degrades to the heuristic.
+    client = OpenAI(api_key=settings.OPENAI_API_KEY, max_retries=0, timeout=20)
     convo = "\n".join(f"{t.get('who')}: {t.get('text')}" for t in transcript)
+    extract_task = ""
+    if questions:
+        vars_block = "\n".join(f"- {q['expected_var']}: {q['text']}" for q in questions)
+        extract_task = (
+            "; (3) với MỖI biến dưới đây, trích ngắn gọn điều bệnh nhân trả lời "
+            "(vd \"không\", \"có - sốt 38 độ\"; null nếu chưa hỏi hoặc không trả lời):\n"
+            f"{vars_block}\n"
+        )
     prompt = (
         "Bạn là điều dưỡng theo dõi hậu phẫu. Dưới đây là bản ghi cuộc gọi theo dõi "
         "giữa trợ lý và bệnh nhân. Hãy: (1) tóm tắt ngắn gọn tình trạng bệnh nhân bằng "
         "tiếng Việt; (2) phân loại mức nguy cơ 'red' (nguy cơ cao, cần bác sĩ xử lý ngay), "
-        "'amber' (cần theo dõi thêm) hoặc 'green' (ổn định). "
-        'Trả về JSON: {"summary":"...","tier":"red|amber|green","escalated":true/false}.\n\n'
+        "'amber' (cần theo dõi thêm) hoặc 'green' (ổn định)"
+        f"{extract_task}. "
+        'Trả về JSON: {"summary":"...","tier":"red|amber|green","escalated":true/false'
+        + (',"extracted":{"ten_bien":"trả lời"}' if questions else "") + "}.\n\n"
         f"BẢN GHI:\n{convo}"
     )
     resp = client.chat.completions.create(
@@ -66,18 +79,23 @@ def _gpt(transcript: list[dict]) -> dict:
     )
     data = json.loads(resp.choices[0].message.content)
     tier = data.get("tier") if data.get("tier") in ("red", "amber", "green") else "amber"
+    extracted = data.get("extracted")
     return {
         "summary": data.get("summary") or "(không có tóm tắt)",
         "tier": tier,
         "escalated": bool(data.get("escalated")) or tier == "red",
+        "extracted": {k: v for k, v in extracted.items() if v is not None}
+                     if isinstance(extracted, dict) else {},
         "source": "gpt",
     }
 
 
-def analyze(transcript: list[dict]) -> dict:
+def analyze(transcript: list[dict], questions: list[dict] | None = None) -> dict:
+    """questions: [{"text", "expected_var"}] — when given, the GPT path also
+    extracts each variable's answer into result["extracted"]."""
     if settings.OPENAI_API_KEY:
         try:
-            return _gpt(transcript)
+            return _gpt(transcript, questions)
         except Exception as e:  # noqa: BLE001 — demo must not crash on AI errors
             print(f"[call_analysis] GPT failed, using heuristic: {e}", flush=True)
     return _heuristic(transcript)

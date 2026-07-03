@@ -2,19 +2,20 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import smartbot
+from app import gptbot, smartvoice
+from app.config import settings
 from app.db import get_db
 from app.models import BenhAn, CallResult, Monitoring, Question, QuestionSet
-from app.questions_gen import ai_suggest_questions, build_question_set
+from app.questions_gen import CORE, TEMPLATE, ai_suggest_questions, build_question_set
 from app.schemas import (
     CallDemoIn, ConversationIn, GenerateIn, GhiChuIn, MonitoringIn,
     PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, ReExamIn, SetVariablesIn,
-    SetVariablesOut, TemplateIn, ThuocIn,
+    SetVariablesOut, TemplateIn, ThuocIn, TtsIn,
 )
 
 app = FastAPI(title="AfterCare Web Demo")
@@ -61,6 +62,15 @@ def latest_question_set(db: Session, ma_ho_so: str) -> QuestionSet | None:
     return db.scalars(
         select(QuestionSet)
         .where(QuestionSet.ma_ho_so == ma_ho_so)
+        .order_by(QuestionSet.id.desc())
+        .limit(1)
+    ).first()
+
+
+def approved_question_set(db: Session, ma_ho_so: str) -> QuestionSet | None:
+    return db.scalars(
+        select(QuestionSet)
+        .where(QuestionSet.ma_ho_so == ma_ho_so, QuestionSet.status == "approved")
         .order_by(QuestionSet.id.desc())
         .limit(1)
     ).first()
@@ -129,12 +139,7 @@ def questions_fetch(body: SetVariablesIn, db: Session = Depends(get_db)):
         raise HTTPException(400, "set_variables.ma_ho_so required")
     rec = get_record_or_404(db, ma_ho_so)
 
-    qset = db.scalars(
-        select(QuestionSet)
-        .where(QuestionSet.ma_ho_so == ma_ho_so, QuestionSet.status == "approved")
-        .order_by(QuestionSet.id.desc())
-        .limit(1)
-    ).first()
+    qset = approved_question_set(db, ma_ho_so)
     if qset:
         texts = [q.text for q in qset.questions]
     else:
@@ -503,11 +508,7 @@ def call_preview(ma_ho_so: str, db: Session = Depends(get_db)):
     the approved question set if one exists, otherwise the offline template
     draft. No DB write — safe for doctors to preview any time."""
     rec = get_record_or_404(db, ma_ho_so)
-    qset = db.scalars(
-        select(QuestionSet)
-        .where(QuestionSet.ma_ho_so == ma_ho_so, QuestionSet.status == "approved")
-        .order_by(QuestionSet.id.desc()).limit(1)
-    ).first()
+    qset = approved_question_set(db, ma_ho_so)
     if qset:
         source = "approved"
         questions = [
@@ -710,9 +711,13 @@ def _build_answers(db: Session, cr: CallResult) -> list[dict]:
              "raw": raw.get(q.expected_var), "value": extracted.get(q.expected_var)}
             for q in qset.questions
         ]
-    keys = list(dict.fromkeys([*extracted, *raw]))
+    # No stored set (template-driven call): show the extracted signals labeled
+    # via the same core+generic vars; raw Q→A pairs only when nothing extracted.
+    labels = {q["expected_var"]: q["text"] for q in [*CORE, *TEMPLATE]}
+    keys = list(extracted) or list(raw)
     return [
-        {"question": None, "expected_var": k, "raw": raw.get(k), "value": extracted.get(k)}
+        {"question": labels.get(k), "expected_var": k,
+         "raw": raw.get(k), "value": extracted.get(k)}
         for k in keys
     ]
 
@@ -720,25 +725,37 @@ def _build_answers(db: Session, cr: CallResult) -> list[dict]:
 @app.post("/his/call-demo/save")
 def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     """Persist a finished demo call: store the transcript, then summarise +
-    classify (GPT, heuristic fallback) and save as a call_results row so it
-    shows up in the patient's case history."""
+    classify + extract per-question signals (GPT, heuristic fallback) and save
+    as a call_results row so it shows up in the patient's case history."""
     get_record_or_404(db, body.ma_ho_so)
     from app import call_analysis
-    result = call_analysis.analyze(body.transcript)
+    qset = approved_question_set(db, body.ma_ho_so)
+    if qset:
+        qspecs = [{"text": q.text, "expected_var": q.expected_var}
+                  for q in qset.questions if q.expected_var]
+    else:
+        # ponytail: no approved set → extract the deterministic core+generic vars.
+        # AI-personalized extras still land in transcript/summary, just unkeyed.
+        qspecs = [{"text": q["text"], "expected_var": q["expected_var"]}
+                  for q in [*CORE, *TEMPLATE]]
+    result = call_analysis.analyze(body.transcript, qspecs)
 
-    extracted: dict = {}
+    raw: dict = {}
     for a in body.answers or []:
         key = a.get("expected_var") or a.get("question")
         if key:
-            extracted[key] = a.get("answer")
+            raw[key] = a.get("answer")
+    # extracted holds ONLY per-variable signals (GPT). raw keeps the full Q→A
+    # pairs — never dump it into extracted or the case page shows the whole call.
+    extracted = result.get("extracted") or None
 
     cr = CallResult(
         ma_ho_so=body.ma_ho_so,
-        question_set_id=body.question_set_id,
+        question_set_id=body.question_set_id or (qset.id if qset else None),
         session_id="demo-" + datetime.now().strftime("%Y%m%d%H%M%S"),
         started_at=datetime.now(),
         ended_at=datetime.now(),
-        raw_answers=extracted or None,
+        raw_answers=raw or None,
         extracted=extracted or None,
         transcript=body.transcript,
         tier=result["tier"],
@@ -755,12 +772,60 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     }
 
 
+def _patient_questions(db: Session, ma_ho_so: str, rec: BenhAn) -> list[str]:
+    """Approved question set for the patient, else the generated template —
+    same source questions_fetch uses, but without the 5-slot cap (GPT drives)."""
+    qset = approved_question_set(db, ma_ho_so)
+    if qset:
+        return [q.text for q in qset.questions]
+    return [d["text"] for d in build_question_set({
+        "phau_thuat": rec.phau_thuat, "thuoc_ke": rec.thuoc_ke,
+        "ghi_chu_theo_doi": rec.ghi_chu_theo_doi,
+    })]
+
+
 @app.post("/bff/conversation")
-async def bff_conversation(body: ConversationIn):
-    return await smartbot.converse(
-        text=body.text, session_id=body.session_id,
-        ma_ho_so=body.ma_ho_so, first_turn=body.first_turn,
+def bff_conversation(body: ConversationIn, db: Session = Depends(get_db)):
+    rec = get_record_or_404(db, body.ma_ho_so)
+    # Questions + patient info only matter when GPT builds the system prompt (first turn).
+    questions = _patient_questions(db, body.ma_ho_so, rec) if body.first_turn else []
+    return gptbot.converse(
+        text=body.text, session_id=body.session_id, ma_ho_so=body.ma_ho_so,
+        first_turn=body.first_turn, questions=questions,
+        patient={
+            "ho_ten": rec.ho_ten or "",
+            "gioi_tinh": rec.gioi_tinh or "",
+            "tuoi": rec.tuoi,
+            "bac_si_phu_trach": rec.bac_si_phu_trach or "",
+            "phau_thuat": rec.phau_thuat or "",
+            "ngay_xuat_vien": str(rec.ngay_xuat_vien) if rec.ngay_xuat_vien else "",
+            "lich_tai_kham": str(rec.lich_tai_kham) if rec.lich_tai_kham else "",
+        },
     )
+
+
+# --- SmartVoice STT/TTS BFF (creds server-side; browser falls back to Web Speech) ---
+@app.get("/bff/voice-config")
+def voice_config():
+    return {"stt": settings.smartvoice_stt_configured, "tts": settings.smartvoice_tts_configured}
+
+
+@app.post("/bff/stt")
+async def bff_stt(audio: UploadFile = File(...), client_session: str = Form("")):
+    try:
+        text = await smartvoice.stt(await audio.read(), audio.filename or "audio.wav", client_session)
+    except Exception as exc:  # noqa: BLE001 — surface upstream failure to caller
+        raise HTTPException(502, f"SmartVoice STT error: {exc}")
+    return {"text": text}
+
+
+@app.post("/bff/tts")
+async def bff_tts(body: TtsIn):
+    try:
+        link = await smartvoice.tts(body.text)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"SmartVoice TTS error: {exc}")
+    return {"audio_link": link}
 
 
 # SPA served last so explicit API routes above take precedence.
