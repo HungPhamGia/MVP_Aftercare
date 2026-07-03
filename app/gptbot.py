@@ -49,7 +49,7 @@ def _system_prompt(questions: list[str], patient: dict) -> str:
         "2. Nếu người nghe TỪ CHỐI hoặc không muốn nói chuyện: xin lỗi vì đã làm phiền, "
         "chào tạm biệt lịch sự, đặt done=true. KHÔNG thuyết phục thêm.\n"
         "3. Nếu ĐỒNG Ý: giới thiệu và xác nhận danh tính theo mẫu: 'Cháu là điều dưỡng "
-        f"thông minh của bác sĩ {p.get('bac_si_phu_trach') or '(bác sĩ phụ trách)'}. Đây có phải "
+        f"thông minh của {p.get('bac_si_phu_trach') or '(bác sĩ phụ trách)'}. Đây có phải "
         f"số điện thoại của {p.get('ho_ten') or 'bệnh nhân'} không ạ? Mình có ca "
         f"{p.get('phau_thuat') or 'phẫu thuật'} và xuất viện ngày {p.get('ngay_xuat_vien') or '...'}' "
         "— tự nhiên hoá câu chữ, điều chỉnh xưng hô cho phù hợp.\n"

@@ -48,14 +48,33 @@ def latest_call_result(db: Session, ma_ho_so: str) -> CallResult | None:
     ).first()
 
 
-def current_call_result(db: Session, ma_ho_so: str, resolved_at) -> CallResult | None:
+def _current(cr: CallResult | None, resolved_at) -> CallResult | None:
     """Latest call that still counts toward the patient's *current* state.
     A closed case (resolved_at set) discards calls made at/before it, so the
     patient falls back to 'chưa đánh giá' until a newer call comes in."""
-    cr = latest_call_result(db, ma_ho_so)
     if cr and resolved_at and cr.ended_at and cr.ended_at <= resolved_at:
         return None
     return cr
+
+
+def current_call_result(db: Session, ma_ho_so: str, resolved_at) -> CallResult | None:
+    return _current(latest_call_result(db, ma_ho_so), resolved_at)
+
+
+def latest_call_results_map(db: Session) -> dict[str, CallResult]:
+    """Newest call per patient in ONE query (Postgres DISTINCT ON). The old
+    per-row lookup made every page load fire 2 queries per patient — dozens of
+    serial round trips to Supabase, which serialized concurrent users."""
+    rows = db.scalars(
+        select(CallResult)
+        .distinct(CallResult.ma_ho_so)
+        .order_by(CallResult.ma_ho_so, CallResult.id.desc())
+    ).all()
+    return {cr.ma_ho_so: cr for cr in rows}
+
+
+def monitoring_map(db: Session) -> dict[str, Monitoring]:
+    return {m.ma_ho_so: m for m in db.scalars(select(Monitoring)).all()}
 
 
 def latest_question_set(db: Session, ma_ho_so: str) -> QuestionSet | None:
@@ -158,11 +177,10 @@ def questions_fetch(body: SetVariablesIn, db: Session = Depends(get_db)):
 @app.get("/records")
 def list_records(db: Session = Depends(get_db)):
     rows = db.scalars(select(BenhAn)).all()
-    # ponytail: latest tier via per-row lookup (N+1). Fine for MVP volume;
-    # collapse into a window-function join if the list grows.
+    crs = latest_call_results_map(db)
     out = []
     for r in rows:
-        cr = latest_call_result(db, r.ma_ho_so)
+        cr = crs.get(r.ma_ho_so)
         out.append({
             "ma_ho_so": r.ma_ho_so,
             "ho_ten": r.ho_ten,
@@ -331,11 +349,12 @@ def q_to_spec(q: Question) -> dict:
 @app.get("/his/patients")
 def his_patients(db: Session = Depends(get_db)):
     rows = db.scalars(select(BenhAn)).all()
+    crs = latest_call_results_map(db)
+    mons = monitoring_map(db)
     out = []
     for r in rows:
-        mon = db.get(Monitoring, r.ma_ho_so)
-        resolved_at = mon.resolved_at if mon else None
-        cr = current_call_result(db, r.ma_ho_so, resolved_at)
+        mon = mons.get(r.ma_ho_so)
+        cr = _current(crs.get(r.ma_ho_so), mon.resolved_at if mon else None)
         out.append({
             "ma_ho_so": r.ma_ho_so,
             "ho_ten": r.ho_ten,
@@ -425,11 +444,14 @@ def his_performance(db: Session = Depends(get_db)):
 @app.get("/his/notifications")
 def his_notifications(db: Session = Depends(get_db)):
     """Derived alerts: escalated/red cases and overdue monitoring."""
+    recs = {r.ma_ho_so: r for r in db.scalars(select(BenhAn)).all()}
+    crs = latest_call_results_map(db)
+    mons = monitoring_map(db)
     groups = []
     red = []
-    for r in db.scalars(select(BenhAn)).all():
-        mon = db.get(Monitoring, r.ma_ho_so)
-        cr = current_call_result(db, r.ma_ho_so, mon.resolved_at if mon else None)
+    for r in recs.values():
+        mon = mons.get(r.ma_ho_so)
+        cr = _current(crs.get(r.ma_ho_so), mon.resolved_at if mon else None)
         if cr and (cr.tier == "red" or cr.escalated):
             red.append({"ma_ho_so": r.ma_ho_so,
                         "text": f"{r.ho_ten} — nguy cơ cao ({cr.summary or 'cần bác sĩ xem'})"})
@@ -437,9 +459,9 @@ def his_notifications(db: Session = Depends(get_db)):
         groups.append({"group": "Bệnh nhân nguy cơ cao", "tone": "red", "items": red})
 
     overdue = []
-    now = datetime.now()
-    for m in db.scalars(select(Monitoring).where(Monitoring.next_call_at < now)).all():
-        rec = db.get(BenhAn, m.ma_ho_so)
+    # comparison stays in SQL: next_call_at is timestamptz, datetime.now() is naive
+    for m in db.scalars(select(Monitoring).where(Monitoring.next_call_at < datetime.now())).all():
+        rec = recs.get(m.ma_ho_so)
         overdue.append({"ma_ho_so": m.ma_ho_so,
                         "text": f"{rec.ho_ten if rec else m.ma_ho_so} — quá hạn cuộc gọi theo dõi"})
     if overdue:
