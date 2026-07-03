@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -26,6 +26,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def now_utc() -> datetime:
+    """Aware UTC timestamps for the timestamptz columns. Naive now_utc()
+    depends on the server's local clock — the local (UTC+7) machine and Render
+    (UTC) wrote instants 7h apart into the same DB, breaking event ordering
+    (e.g. a case 'closed' in the future kept discarding newer calls)."""
+    return datetime.now(timezone.utc)
 
 
 def row_to_dict(obj) -> dict:
@@ -220,7 +228,7 @@ def create_call_result(body: SetVariablesIn, db: Session = Depends(get_db)):
         ma_ho_so=ma_ho_so,
         session_id=sv.get("session_id"),
         raw_answers={k: v for k, v in sv.items() if k not in ("ma_ho_so", "session_id")},
-        ended_at=datetime.now(),
+        ended_at=now_utc(),
     )
     db.add(cr)
     db.commit()
@@ -257,7 +265,7 @@ def update_monitoring(ma_ho_so: str, body: MonitoringIn, db: Session = Depends(g
         # a newly-scheduled call re-activates a closed case, but keep resolved_at:
         # the patient stays "chưa đánh giá" until the *new* call actually lands.
         mon.monitoring_status = body.monitoring_status or "active"
-    mon.updated_at = datetime.now()
+    mon.updated_at = now_utc()
     db.commit()
     return {
         "ma_ho_so": ma_ho_so,
@@ -276,7 +284,7 @@ def close_case(ma_ho_so: str, db: Session = Depends(get_db)):
     if mon is None:
         mon = Monitoring(ma_ho_so=ma_ho_so)
         db.add(mon)
-    now = datetime.now()
+    now = now_utc()
     mon.resolved_at = now
     mon.next_call_at = None
     mon.monitoring_status = "resolved"
@@ -298,7 +306,7 @@ def update_re_exam(ma_ho_so: str, body: ReExamIn, db: Session = Depends(get_db))
 @app.post("/questions")
 def create_question_set(body: QuestionSetIn, db: Session = Depends(get_db)):
     get_record_or_404(db, body.ma_ho_so)
-    qset = QuestionSet(ma_ho_so=body.ma_ho_so, status="draft", created_at=datetime.now())
+    qset = QuestionSet(ma_ho_so=body.ma_ho_so, status="draft", created_at=now_utc())
     qset.questions = [
         Question(
             text=q.text, order_index=q.order_index,
@@ -318,7 +326,7 @@ def approve_question_set(set_id: int, db: Session = Depends(get_db)):
     if qset is None:
         raise HTTPException(404, f"question_set {set_id} not found")
     qset.status = "approved"
-    qset.approved_at = datetime.now()
+    qset.approved_at = now_utc()
     for q in qset.questions:
         q.approved = True
     db.commit()
@@ -432,7 +440,7 @@ def his_performance(db: Session = Depends(get_db)):
     n_patients = db.scalar(select(func.count()).select_from(BenhAn))
     overdue = db.scalar(
         select(func.count()).select_from(Monitoring)
-        .where(Monitoring.next_call_at < datetime.now())
+        .where(Monitoring.next_call_at < now_utc())
     )
     return {
         "total_calls": total, "by_tier": by_tier, "escalated": escalated,
@@ -459,8 +467,7 @@ def his_notifications(db: Session = Depends(get_db)):
         groups.append({"group": "Bệnh nhân nguy cơ cao", "tone": "red", "items": red})
 
     overdue = []
-    # comparison stays in SQL: next_call_at is timestamptz, datetime.now() is naive
-    for m in db.scalars(select(Monitoring).where(Monitoring.next_call_at < datetime.now())).all():
+    for m in db.scalars(select(Monitoring).where(Monitoring.next_call_at < now_utc())).all():
         rec = recs.get(m.ma_ho_so)
         overdue.append({"ma_ho_so": m.ma_ho_so,
                         "text": f"{rec.ho_ten if rec else m.ma_ho_so} — quá hạn cuộc gọi theo dõi"})
@@ -569,7 +576,7 @@ def questions_generate(body: GenerateIn, db: Session = Depends(get_db)):
         "thuoc_ke": rec.thuoc_ke,
         "ghi_chu_theo_doi": rec.ghi_chu_theo_doi,
     })
-    qset = QuestionSet(ma_ho_so=body.ma_ho_so, status="pending", created_at=datetime.now())
+    qset = QuestionSet(ma_ho_so=body.ma_ho_so, status="pending", created_at=now_utc())
     qset.questions = [
         Question(
             text=d["text"], order_index=d["order_index"],
@@ -653,7 +660,7 @@ def save_patient_question_set(
 
     qset = latest_question_set(db, ma_ho_so)
     if qset is None:
-        qset = QuestionSet(ma_ho_so=ma_ho_so, status="approved", created_at=datetime.now())
+        qset = QuestionSet(ma_ho_so=ma_ho_so, status="approved", created_at=now_utc())
         db.add(qset)
     else:
         for q in list(qset.questions):
@@ -671,7 +678,7 @@ def save_patient_question_set(
                                expected_var=pq.expected_var, red_flag=False, approved=True))
     qset.questions = merged
     qset.status = "approved"
-    qset.approved_at = datetime.now()
+    qset.approved_at = now_utc()
     db.commit()
     db.refresh(qset)
     return {"set_id": qset.id, "status": qset.status, "count": len(merged)}
@@ -774,9 +781,9 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     cr = CallResult(
         ma_ho_so=body.ma_ho_so,
         question_set_id=body.question_set_id or (qset.id if qset else None),
-        session_id="demo-" + datetime.now().strftime("%Y%m%d%H%M%S"),
-        started_at=datetime.now(),
-        ended_at=datetime.now(),
+        session_id="demo-" + now_utc().strftime("%Y%m%d%H%M%S"),
+        started_at=now_utc(),
+        ended_at=now_utc(),
         raw_answers=raw or None,
         extracted=extracted or None,
         transcript=body.transcript,

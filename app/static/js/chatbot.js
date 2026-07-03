@@ -375,13 +375,18 @@ function stopTimer() { if (DEMO.timerId) { clearInterval(DEMO.timerId); DEMO.tim
 async function endCall() {
   if (DEMO.phase === "ended") return;
   DEMO.phase = "ended";
+  const duration = fmtTimer(Math.floor((Date.now() - DEMO.startTs) / 1000));
   stopTimer();
   stopMics();
   DEMO.interim = "";
   stopSpeak();
 
-  $("#demoRoot").innerHTML = `<section class="card demo-result"><h2>Đang lưu & phân tích cuộc gọi…</h2>
-    <p class="muted-note">Hệ thống đang tóm tắt và phân loại mức nguy cơ.</p></section>`;
+  $("#demoRoot").innerHTML = `
+    <section class="card demo-result">
+      <div class="dr-icon">⏳</div>
+      <h2>Đang lưu & phân tích cuộc gọi…</h2>
+      <p class="muted-note">Hệ thống đang tóm tắt và phân loại mức nguy cơ.</p>
+    </section>`;
 
   let res;
   try {
@@ -389,21 +394,26 @@ async function endCall() {
       ma_ho_so: DEMO.maHoSo, transcript: DEMO.transcript, answers: DEMO.answers,
     });
   } catch (e) {
-    $("#demoRoot").innerHTML = `<section class="card demo-result">
-      <h2>Đã kết thúc cuộc gọi</h2>
-      <p class="muted-note">Không lưu được vào hồ sơ: ${esc(e.message)}</p>
-      <button class="btn btn-leaf" onclick="renderSetup()">Demo lại</button></section>`;
+    $("#demoRoot").innerHTML = `
+      <section class="card demo-result">
+        <div class="dr-icon">✕</div>
+        <h2>Đã kết thúc cuộc gọi</h2>
+        <p class="muted-note">Không lưu được vào hồ sơ: ${esc(e.message)}</p>
+        <div class="dr-actions"><button class="btn btn-leaf" onclick="renderSetup()">Demo lại</button></div>
+      </section>`;
     return;
   }
 
+  const p = DEMO.patient || { name: DEMO.maHoSo, mrn: DEMO.maHoSo };
   const tierLabel = { red: "Nguy cơ cao", amber: "Cần theo dõi", green: "Ổn định" }[res.tier] || res.tier;
+  const tierIcon = { red: "⚠", amber: "!", green: "✓" }[res.tier] || "✓";
   $("#demoRoot").innerHTML = `
     <section class="card demo-result">
-      <div class="dr-head">
-        <span class="badge ${esc(res.tier)}">${esc(tierLabel)}</span>
-        <h2>Đã kết thúc & lưu vào hồ sơ ca</h2>
-      </div>
-      ${res.escalated ? `<div class="callout red" style="margin:10px 0"><b>⚠ Đã nâng cảnh báo</b> — cần bác sĩ phụ trách xem sớm.</div>` : ""}
+      <div class="dr-icon ${esc(res.tier)}">${tierIcon}</div>
+      <h2>Đã kết thúc & lưu vào hồ sơ ca</h2>
+      <p class="dr-meta">${esc(p.name)} · ${esc(p.mrn)} · ${duration}</p>
+      <span class="badge ${esc(res.tier)}">${esc(tierLabel)}</span>
+      ${res.escalated ? `<div class="callout red"><b>⚠ Đã nâng cảnh báo</b> — cần bác sĩ phụ trách xem sớm.</div>` : ""}
       <div class="summary-block"><h4>Tóm tắt cuộc gọi ${res.source === "gpt" ? "(GPT)" : "(tự động)"}</h4>
         <p>${esc(res.summary)}</p></div>
       <div class="dr-actions">

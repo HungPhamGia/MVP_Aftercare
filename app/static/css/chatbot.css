@@ -79,12 +79,29 @@
 .chat-msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 13px; }
 .chat-msg.interim { opacity: .65; font-style: italic; } /* live mic transcript, not yet final */
 
-/* ---- result ----------------------------------------------------------- */
-.demo-result { max-width: 640px; }
-.dr-head { display: flex; align-items: center; gap: 12px; }
-.dr-head h2 { margin: 0; font-size: 19px; }
-.dr-actions { display: flex; gap: 10px; margin-top: 16px; }
-.demo-result .callout.red { background: var(--red-soft, #fde8e8); color: var(--red-ink, #9b2c2c); padding: 10px 14px; border-radius: 10px; }
-.demo-result .summary-block { margin-top: 14px; }
+/* ---- result: centered column, same rhythm as the setup card ----------- */
+.demo-result {
+  max-width: 560px; margin: 6vh auto 0; padding: 32px 36px 34px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+}
+.demo-result h2 { margin: 0; font-size: 20px; }
+.dr-meta { margin: 0; color: var(--muted); font-size: 13.5px; }
+.dr-icon {
+  width: 64px; height: 64px; border-radius: 50%; font-size: 28px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2, #f1f4f8); color: var(--muted);
+}
+.dr-icon.green { background: var(--green-soft, #e6f4ea); color: var(--green-ink, #276749); }
+.dr-icon.amber { background: var(--amber-soft, #fdf3e0); color: var(--amber-ink, #975a16); }
+.dr-icon.red { background: var(--red-soft, #fde8e8); color: var(--red-ink, #9b2c2c); }
+.demo-result .callout.red {
+  width: 100%; background: var(--red-soft, #fde8e8); color: var(--red-ink, #9b2c2c);
+  padding: 10px 14px; border-radius: 10px; font-size: 14px;
+}
+.demo-result .summary-block {
+  width: 100%; text-align: left; background: var(--surface-2, #f6f8fa);
+  border-radius: 12px; padding: 14px 16px; margin-top: 4px;
+}
 .demo-result .summary-block h4 { margin: 0 0 6px; }
 .demo-result .summary-block p { margin: 0; line-height: 1.55; }
+.dr-actions { display: flex; gap: 10px; margin-top: 10px; justify-content: center; }
