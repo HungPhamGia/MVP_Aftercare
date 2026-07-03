@@ -16,6 +16,7 @@ const DEMO = {
   phase: "setup", transcript: [], answers: [], interim: "",
   awaiting: false, ttsOn: true, startTs: 0, timerId: null, rec: null,
   sttOn: false, ttsOnSV: false, audio: null, recCtx: null, micDead: false,
+  misses: 0, // consecutive turns where STT heard nothing usable
 };
 
 // Which SmartVoice services are wired on the server? (STT/TTS keyed separately.)
@@ -87,7 +88,7 @@ async function startCall(mrn) {
   DEMO.patient = getPatient(mrn);
   DEMO.ttsOn = $("#demoTts") ? $("#demoTts").checked : true;
   DEMO.transcript = []; DEMO.answers = []; DEMO.awaiting = false; DEMO.lastQ = null;
-  DEMO.interim = ""; DEMO.micDead = false;
+  DEMO.interim = ""; DEMO.micDead = false; DEMO.misses = 0;
   DEMO.session = crypto.randomUUID ? crypto.randomUUID() : "s" + Date.now() + Math.random();
   history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(mrn));
 
@@ -166,6 +167,22 @@ function startListening() {
   DEMO.sttOn ? svStartMic() : webStartMic();
 }
 
+/* STT heard nothing / couldn't recognize → the bot SAYS it didn't hear
+   (a toast is invisible on a phone call), then reopens the mic. Rotating
+   phrasings so it sounds human; after 3 misses just keep the line open
+   silently instead of nagging. */
+const RETRY_LINES = [
+  "Dạ cháu xin lỗi, cháu chưa nghe rõ, mình có thể nhắc lại được không ạ?",
+  "Alo, cháu chưa nghe được mình nói ạ, mình nói lại giúp cháu với ạ.",
+  "Dạ mình nói lại giúp cháu một lần nữa được không ạ? Cháu nghe chưa được rõ.",
+];
+function askRepeat() {
+  if (DEMO.phase !== "calling" || !DEMO.awaiting) return;
+  DEMO.misses += 1;
+  if (DEMO.misses > RETRY_LINES.length) { startListening(); return; }
+  botTurn(RETRY_LINES[DEMO.misses - 1], true);
+}
+
 /* Send one turn to the Smartbot BFF and render its reply. */
 async function botAsk(text, firstTurn) {
   const st = $("#phStatus"); if (st) st.textContent = "Trợ lý đang xử lý…";
@@ -196,6 +213,7 @@ function submitAnswer(text) {
   if (!text || DEMO.phase !== "calling" || !DEMO.awaiting) return;
   stopMics(); // typed answers may arrive while the mic is open
   DEMO.interim = "";
+  DEMO.misses = 0;
   DEMO.transcript.push({ who: DEMO.patient ? DEMO.patient.name : "Bệnh nhân", text });
   DEMO.answers.push({ question: DEMO.lastQ, answer: text });
   DEMO.awaiting = false;
@@ -262,7 +280,7 @@ function webStartMic() {
     const t = (finalText || DEMO.interim || "").trim();
     setInterim("");
     if (t) submitAnswer(t);
-    else startListening(); // heard nothing — keep the line open
+    else askRepeat(); // heard nothing — say so, then keep the line open
   };
   rec.start();
 }
@@ -304,7 +322,7 @@ async function svStopAndSend() {
   r.stream.getTracks().forEach(t => t.stop());
   const wav = encodeWav(r.chunks, r.rate);
   r.ctx.close();
-  if (!wav.byteLength) { setInterim(""); return; }
+  if (!wav.byteLength) { setInterim(""); askRepeat(); return; }
 
   setInterim("Đang nhận dạng giọng nói…");
   const fd = new FormData();
@@ -316,11 +334,11 @@ async function svStopAndSend() {
     const t = ((await resp.json()).text || "").trim();
     setInterim("");
     if (t) submitAnswer(t);
-    else { toast("Không nghe rõ, thử lại hoặc gõ câu trả lời."); startListening(); }
+    else askRepeat(); // STT returned nothing — bot asks the patient to repeat
   } catch (e) {
     setInterim("");
     toast("Lỗi nhận dạng giọng nói: " + e.message);
-    startListening(); // keep the call alive; typing still works
+    askRepeat(); // keep the call alive; typing still works
   }
 }
 
