@@ -2,7 +2,7 @@
 
 <img src="docs/logo_aftercare.jpg" width="180" alt="Logo AfterCare"/>
 
-# 🏥 AfterCare Voicebot
+# 🏥 AfterCare - Hệ thống theo dõi bệnh nhân hậu xuất viện
 
 **Voicebot AI gọi điện theo dõi bệnh nhân sau xuất viện — tóm tắt cuộc gọi, phân tầng nguy cơ, cảnh báo bác sĩ.**
 
@@ -34,21 +34,21 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 
 ## ✨ Tính năng
 
-- **📇 Dashboard bệnh nhân** — danh sách hồ sơ hậu phẫu, tầng nguy cơ mới nhất, lần gọi cuối,
+- ** Dashboard bệnh nhân** — danh sách hồ sơ hậu phẫu, tầng nguy cơ mới nhất, lần gọi cuối,
   lịch gọi kế tiếp, ca quá hạn theo dõi, lịch tái khám.
-- **📝 Sinh & duyệt bộ câu hỏi** — nhóm câu **CORE** về dấu hiệu nguy hiểm (sốt, vết mổ, đau,
+- ** Sinh & duyệt bộ câu hỏi** — nhóm câu **CORE** về dấu hiệu nguy hiểm (sốt, vết mổ, đau,
   chảy máu, khó thở) được khóa không cho xóa; câu cá nhân hóa do GPT sinh theo hồ sơ
   (phẫu thuật, thuốc kê, ghi chú theo dõi). Bác sĩ chỉnh sửa rồi duyệt mới dùng để gọi.
-- **🤖 Voicebot GPT** — mở đầu bằng câu xin phép ghi âm cố định, xác nhận danh tính, hỏi lần
+- ** Voicebot GPT** — mở đầu bằng câu xin phép ghi âm cố định, xác nhận danh tính, hỏi lần
   lượt các câu đã duyệt, được phép hỏi làm rõ nhưng **không chẩn đoán**.
-- **🎙️ Giọng nói tiếng Việt** — STT/TTS qua VNPT SmartVoice (nhiều giọng vùng miền); thiếu
+- ** Giọng nói tiếng Việt** — STT/TTS qua VNPT SmartVoice (nhiều giọng vùng miền); thiếu
   cấu hình thì trình duyệt tự fallback Web Speech API — demo vẫn chạy.
-- **📊 Phân tích cuộc gọi** — tóm tắt hội thoại, trích đáp án theo từng biến (`sot`, `vet_mo`,…),
+- ** Phân tích cuộc gọi** — tóm tắt hội thoại, trích đáp án theo từng biến (`sot`, `vet_mo`,…),
   phân tầng nguy cơ và cờ chuyển bác sĩ. Có GPT thì dùng GPT, không thì heuristic từ khóa —
   toàn bộ pipeline chạy được offline.
-- **🚨 Cảnh báo & vòng đời ca** — thông báo bệnh nhân nguy cơ cao / quá hạn gọi; đóng ca đưa
+- ** Cảnh báo & vòng đời ca** — thông báo bệnh nhân nguy cơ cao / quá hạn gọi; đóng ca đưa
   bệnh nhân về "chưa đánh giá" nhưng giữ nguyên lịch sử cuộc gọi.
-- **🔒 An toàn dữ liệu** — mọi secret (OpenAI, VNPT, DB) chỉ ở server; trình duyệt chỉ gọi
+- ** An toàn dữ liệu** — mọi secret (OpenAI, VNPT, DB) chỉ ở server; trình duyệt chỉ gọi
   endpoint của app (mô hình BFF). PHI nhạy cảm (`so_the_bhyt`, ICD, xét nghiệm) không bao giờ
   gửi cho bot hay lộ ra API.
 
