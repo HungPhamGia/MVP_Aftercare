@@ -17,7 +17,7 @@
 
 Bệnh nhân hậu phẫu về nhà thường "mất dấu" cho đến kỳ tái khám. **AfterCare** lấp khoảng trống đó:
 bác sĩ duyệt bộ câu hỏi theo dõi cho từng bệnh nhân, voicebot AI gọi hỏi thăm định kỳ, hệ thống
-tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đẩy cảnh báo những ca cần can thiệp.
+tự tóm tắt hội thoại, phân loại nguy cơ và đẩy cảnh báo những ca cần can thiệp.
 
 ---
 
