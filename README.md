@@ -7,7 +7,7 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?logo=fastapi)
 ![Postgres](https://img.shields.io/badge/Supabase-Postgres-3ECF8E?logo=supabase&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--5.4--mini-412991?logo=openai&logoColor=white)
 ![VNPT](https://img.shields.io/badge/VNPT-SmartVoice_STT%2FTTS-blue)
 ![Status](https://img.shields.io/badge/status-MVP%20demo-orange)
 
@@ -51,19 +51,7 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 
 ## 🏗 Kiến trúc
 
-```mermaid
-flowchart LR
-    B["🌐 Trình duyệt<br/>(HTML/JS thuần)"]
-    API["⚡ FastAPI<br/>HIS API + BFF"]
-    GPT["🧠 OpenAI GPT<br/>voicebot · sinh câu hỏi · phân tích"]
-    SV["🎙️ VNPT SmartVoice<br/>STT / TTS"]
-    DB[("🗄️ Supabase Postgres<br/>hồ sơ · câu hỏi · cuộc gọi")]
-
-    B -->|"fetch (không secret)"| API
-    API --> GPT
-    API --> SV
-    API --> DB
-```
+![Kiến trúc và luồng dữ liệu — mô hình BFF, lớp chặn PHI, TLS toàn tuyến](docs/so_do_kien_truc_bao_mat.svg)
 
 Luồng nghiệp vụ: **xem bệnh nhân → sinh & duyệt câu hỏi → voicebot gọi → phân tích, phân tầng
 nguy cơ → dashboard & cảnh báo → đóng ca / đặt lịch gọi tiếp**.
@@ -86,7 +74,7 @@ mvp-aftercare-his-api/
 │   ├── seed_demo.py      # Seed dữ liệu demo, chạy lại được (idempotent)
 │   └── static/           # Frontend: patients, case, questions, call, manager…
 ├── create_tables.sql     # Tạo bảng phía AfterCare (idempotent)
-├── test_app.py           # Self-check read-only trên DB thật
+├── test_app.py           # Bộ test tự động (offline + smoke + write-rollback)
 ├── .env.example          # Mẫu biến môi trường
 └── requirements.txt
 ```
@@ -97,6 +85,14 @@ mvp-aftercare-his-api/
 ## 🚀 Bắt đầu nhanh
 
 **Yêu cầu:** Python 3.11+ và một database Supabase Postgres đã có bảng `"Hồ sơ bệnh nhân"`.
+
+Cài đặt & chạy **1 lệnh** (sau khi đã điền `DATABASE_URL` vào `.env` — copy từ `.env.example`):
+
+```bash
+pip install -r requirements.txt && uvicorn app.main:app
+```
+
+Chi tiết từng bước cho lần đầu:
 
 ```bash
 # 1. Cài dependencies
@@ -115,7 +111,8 @@ uvicorn app.main:app --reload
 
 Mở <http://localhost:8000> — frontend được FastAPI serve luôn. Swagger UI tại `/docs`.
 
-Kiểm tra nhanh (read-only, cần DB thật):
+**Test tự động** — 13 test: logic phân loại (offline), smoke read-only, và toàn bộ endpoint ghi
+(mỗi test bọc trong transaction rollback nên **không để lại dữ liệu** trong DB):
 
 ```bash
 python test_app.py
@@ -196,6 +193,10 @@ Secret chỉ nằm trong `.env` (gitignored). Trình duyệt **không bao giờ*
   sống sót qua restart thì chuyển sang Redis/DB.
 - Không có OpenAI/SmartVoice key vẫn demo được: câu hỏi dùng template, phân tích dùng
   heuristic, giọng nói dùng Web Speech của trình duyệt.
+
+Lộ trình hạ tầng khi triển khai thực tế (100% đặt tại Việt Nam):
+
+![Lộ trình hạ tầng — MVP demo → triển khai thực tế tại Việt Nam](docs/so_do_lo_trinh_ha_tang.svg)
 
 ---
 

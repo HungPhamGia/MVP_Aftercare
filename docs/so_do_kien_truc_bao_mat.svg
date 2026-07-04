@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 960" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0f766e"/>
+    </marker>
+    <marker id="ahr" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0f766e"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="960" fill="#ffffff"/>
+
+  <!-- Tiêu đề -->
+  <text x="800" y="56" text-anchor="middle" font-size="30" font-weight="bold" fill="#1e293b">Kiến trúc và luồng dữ liệu — AfterCare Voicebot</text>
+  <text x="800" y="92" text-anchor="middle" font-size="18" fill="#64748b">Mô hình BFF: trình duyệt không giữ secret · PHI nhạy cảm bị chặn ở tầng API · TLS toàn tuyến</text>
+
+  <!-- ============ TRÌNH DUYỆT ============ -->
+  <rect x="50" y="170" width="350" height="330" rx="14" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="225" y="212" text-anchor="middle" font-size="22" font-weight="bold" fill="#1e293b">🌐 Trình duyệt</text>
+  <text x="225" y="240" text-anchor="middle" font-size="15" fill="#64748b">Dashboard bác sĩ · Trang gọi voicebot</text>
+  <line x1="75" y1="258" x2="375" y2="258" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="75" y="292" font-size="17" fill="#1e293b">• Không giữ secret / API key nào</text>
+  <text x="75" y="324" font-size="17" fill="#1e293b">• Chỉ gọi endpoint của app</text>
+  <text x="75" y="356" font-size="17" fill="#1e293b">• Không gọi thẳng OpenAI / VNPT</text>
+  <text x="75" y="388" font-size="17" fill="#1e293b">• Thiếu cấu hình STT/TTS thì tự</text>
+  <text x="75" y="418" font-size="17" fill="#1e293b">   fallback Web Speech của trình duyệt</text>
+  <text x="75" y="470" font-size="15" font-style="italic" fill="#64748b">Người dùng: bác sĩ / điều dưỡng</text>
+
+  <!-- Contract voicebot -->
+  <rect x="50" y="545" width="350" height="175" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="225" y="583" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e293b">🤖 Contract cho voicebot</text>
+  <text x="225" y="616" text-anchor="middle" font-size="16" fill="#1e293b">Bot chỉ nhận đúng 4 biến:</text>
+  <text x="225" y="644" text-anchor="middle" font-size="16" font-weight="bold" fill="#0f766e">họ tên · phẫu thuật</text>
+  <text x="225" y="672" text-anchor="middle" font-size="16" font-weight="bold" fill="#0f766e">ngày tái khám · BS phụ trách</text>
+  <text x="225" y="702" text-anchor="middle" font-size="14" fill="#64748b">(POST /his/patient/fetch)</text>
+
+  <!-- ============ FASTAPI ============ -->
+  <rect x="590" y="140" width="440" height="580" rx="14" fill="#f0fdfa" stroke="#0f766e" stroke-width="2.5"/>
+  <text x="810" y="182" text-anchor="middle" font-size="22" font-weight="bold" fill="#115e59">⚡ FastAPI — HIS API + BFF</text>
+  <text x="810" y="208" text-anchor="middle" font-size="15" fill="#64748b">một service duy nhất, mọi kết nối ra ngoài từ đây</text>
+
+  <text x="615" y="248" font-size="17" font-weight="bold" fill="#1e293b">🔑 Secrets chỉ nằm trong .env server:</text>
+  <text x="615" y="276" font-size="15" fill="#475569">DATABASE_URL · OPENAI_API_KEY · VNPT tokens</text>
+
+  <!-- Lớp chặn PHI -->
+  <rect x="615" y="300" width="390" height="212" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+  <text x="640" y="336" font-size="18" font-weight="bold" fill="#dc2626">⛔ Lớp chặn PHI (ở tầng API)</text>
+  <text x="640" y="368" font-size="16" fill="#1e293b">• so_the_bhyt — số thẻ BHYT</text>
+  <text x="640" y="396" font-size="16" fill="#1e293b">• chan_doan — mã bệnh ICD</text>
+  <text x="640" y="424" font-size="16" fill="#1e293b">• xet_nghiem — kết quả xét nghiệm</text>
+  <text x="640" y="452" font-size="16" fill="#1e293b">• số điện thoại / địa chỉ liên hệ</text>
+  <text x="640" y="490" font-size="15" font-weight="bold" font-style="italic" fill="#dc2626">→ không bao giờ rời khỏi server</text>
+
+  <text x="615" y="552" font-size="17" font-weight="bold" fill="#1e293b">🛡️ Phòng thủ đầu vào:</text>
+  <text x="615" y="582" font-size="16" fill="#1e293b">• Pydantic validate mọi request</text>
+  <text x="615" y="610" font-size="16" fill="#1e293b">• SQLAlchemy parameterized query</text>
+  <text x="615" y="638" font-size="16" fill="#1e293b">• 400 / 404 không lộ cấu trúc dữ liệu</text>
+  <text x="615" y="690" font-size="15" font-style="italic" fill="#64748b">Prompt gửi AI kiểm soát tại 1 điểm duy nhất</text>
+
+  <!-- ============ CỘT DỊCH VỤ NGOÀI ============ -->
+  <!-- OpenAI -->
+  <rect x="1200" y="120" width="350" height="180" rx="14" fill="#faf5ff" stroke="#c4b5fd" stroke-width="2"/>
+  <text x="1375" y="158" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e293b">🧠 OpenAI GPT</text>
+  <text x="1375" y="190" text-anchor="middle" font-size="15" fill="#475569">não voicebot · sinh câu hỏi</text>
+  <text x="1375" y="214" text-anchor="middle" font-size="15" fill="#475569">phân tích và phân tầng nguy cơ</text>
+  <text x="1375" y="252" text-anchor="middle" font-size="14" font-style="italic" fill="#64748b">tắt được — có fallback heuristic,</text>
+  <text x="1375" y="274" text-anchor="middle" font-size="14" font-style="italic" fill="#64748b">hệ thống vẫn chạy offline</text>
+
+  <!-- SmartVoice -->
+  <rect x="1200" y="340" width="350" height="140" rx="14" fill="#eff6ff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="1375" y="378" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e293b">🎙️ VNPT SmartVoice</text>
+  <text x="1375" y="408" text-anchor="middle" font-size="15" fill="#475569">STT / TTS tiếng Việt</text>
+  <text x="1375" y="444" text-anchor="middle" font-size="15" font-weight="bold" fill="#0f766e">🇻🇳 dịch vụ trong nước</text>
+
+  <!-- DB -->
+  <rect x="1200" y="520" width="350" height="180" rx="14" fill="#fffbeb" stroke="#fcd34d" stroke-width="2"/>
+  <text x="1375" y="558" text-anchor="middle" font-size="20" font-weight="bold" fill="#1e293b">🗄️ Supabase Postgres</text>
+  <text x="1375" y="590" text-anchor="middle" font-size="15" fill="#475569">hồ sơ · bộ câu hỏi · kết quả gọi</text>
+  <text x="1375" y="630" text-anchor="middle" font-size="15" font-weight="bold" fill="#b45309">MVP: dữ liệu 100% hư cấu</text>
+  <text x="1375" y="656" text-anchor="middle" font-size="14" fill="#b45309">không có PHI thật</text>
+
+  <!-- ============ MŨI TÊN ============ -->
+  <!-- Browser <-> FastAPI -->
+  <line x1="405" y1="330" x2="585" y2="330" stroke="#0f766e" stroke-width="2.5" marker-end="url(#ah)" marker-start="url(#ahr)"/>
+  <text x="495" y="312" text-anchor="middle" font-size="15" font-weight="bold" fill="#0f766e">HTTPS</text>
+  <text x="495" y="358" text-anchor="middle" font-size="14" fill="#475569">hồ sơ theo dõi</text>
+  <text x="495" y="378" text-anchor="middle" font-size="14" fill="#dc2626">(không có số thẻ BHYT)</text>
+
+  <!-- FastAPI -> GPT -->
+  <line x1="1035" y1="235" x2="1195" y2="205" stroke="#0f766e" stroke-width="2.5" marker-end="url(#ah)"/>
+  <text x="1112" y="176" text-anchor="middle" font-size="13" fill="#475569">TLS · tên, tuổi, phẫu thuật,</text>
+  <text x="1112" y="194" text-anchor="middle" font-size="13" fill="#475569">lịch tái khám + transcript</text>
+
+  <!-- FastAPI -> SmartVoice -->
+  <line x1="1035" y1="410" x2="1195" y2="410" stroke="#0f766e" stroke-width="2.5" marker-end="url(#ah)"/>
+  <text x="1112" y="390" text-anchor="middle" font-size="13" fill="#475569">TLS · audio/text lượt nói</text>
+
+  <!-- FastAPI -> DB -->
+  <line x1="1035" y1="610" x2="1195" y2="610" stroke="#0f766e" stroke-width="2.5" marker-end="url(#ah)"/>
+  <text x="1112" y="590" text-anchor="middle" font-size="13" fill="#475569">sslmode=require (mã hóa)</text>
+
+  <!-- Bot contract -> FastAPI -->
+  <line x1="405" y1="632" x2="585" y2="632" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#ah)"/>
+
+  <!-- ============ DẢI KIỂM CHỨNG ============ -->
+  <rect x="50" y="790" width="1500" height="120" rx="14" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="800" y="838" text-anchor="middle" font-size="19" font-weight="bold" fill="#115e59">✅ Kiểm chứng tự động — python test_app.py : 13/13 test pass</text>
+  <text x="800" y="874" text-anchor="middle" font-size="16" fill="#1e293b">3 test bảo mật fail ngay nếu PHI rò rỉ · test xong DB không bị thay đổi (transaction rollback)</text>
+</svg>
