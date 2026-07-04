@@ -17,9 +17,6 @@ Bệnh nhân hậu phẫu về nhà thường "mất dấu" cho đến kỳ tái
 bác sĩ duyệt bộ câu hỏi theo dõi cho từng bệnh nhân, voicebot AI gọi hỏi thăm định kỳ, hệ thống
 tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đẩy cảnh báo những ca cần can thiệp.
 
-Toàn bộ là **một ứng dụng FastAPI duy nhất** — backend, "bộ não" GPT của voicebot, BFF giọng nói
-và frontend tĩnh (HTML/JS thuần, không build step) — deploy một web service là chạy.
-
 ---
 
 ## 📋 Mục lục
