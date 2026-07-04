@@ -27,7 +27,7 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 - [Giao diện demo](#️-giao-diện-demo)
 - [Kiến trúc](#-kiến-trúc)
 - [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
-- [Bắt đầu nhanh](#-bắt-đầu-nhanh)
+- [Cài đặt và Script test](#-bắt-đầu-nhanh)
 - [Biến môi trường](#-biến-môi-trường)
 - [API chính](#-api-chính)
 - [Ghi chú triển khai](#-ghi-chú-triển-khai)
@@ -95,7 +95,7 @@ mvp-aftercare-his-api/
 > 💡 Thư mục `../SmartVoice/` cạnh repo chứa tài liệu API + Postman collection của VNPT
 > SmartVoice để tham khảo — không phải code.
 
-## 🚀 Bắt đầu nhanh
+## 🚀 Cài đặt và Script test
 
 **Yêu cầu:** Python 3.11+ và một database Supabase Postgres đã có bảng `"Hồ sơ bệnh nhân"`.
 
