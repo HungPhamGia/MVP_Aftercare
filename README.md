@@ -27,8 +27,8 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 - [Giao diện demo](#️-giao-diện-demo)
 - [Kiến trúc](#-kiến-trúc)
 - [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
-- [Cài đặt và Script test](#-bắt-đầu-nhanh)
-- [Biến môi trường](#-biến-môi-trường)
+- [Cài đặt và Script test](#-cài-đặt-và-script-test)
+- [Biến môi trường](#️-biến-môi-trường)
 - [API chính](#-api-chính)
 - [Ghi chú triển khai](#-ghi-chú-triển-khai)
 
