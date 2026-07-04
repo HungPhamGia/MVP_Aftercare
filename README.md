@@ -2,7 +2,7 @@
 
 <img src="docs/logo_aftercare.jpg" width="180" alt="Logo AfterCare"/>
 
-# 🏥 AfterCare - Hệ thống theo dõi bệnh nhân hậu xuất viện
+#  AfterCare - Hệ thống theo dõi bệnh nhân hậu xuất viện
 
 **Voicebot AI gọi điện theo dõi bệnh nhân sau xuất viện — tóm tắt cuộc gọi, phân tầng nguy cơ, cảnh báo bác sĩ.**
 
