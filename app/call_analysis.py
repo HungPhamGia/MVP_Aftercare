@@ -30,8 +30,22 @@ def _patient_text(transcript: list[dict]) -> str:
     return " ".join(t.get("text", "") for t in transcript if _is_patient(t)).lower()
 
 
+def _failed(status: str, summary: str, source: str) -> dict:
+    """Failed call: no tier (patient stays 'chưa đánh giá'), nothing extracted."""
+    return {"summary": summary, "tier": None, "escalated": False,
+            "extracted": {}, "call_status": status, "source": source}
+
+
+REFUSE_KW = ["từ chối", "không đồng ý", "đừng gọi", "không nghe"]
+
+
 def _heuristic(transcript: list[dict]) -> dict:
     text = _patient_text(transcript)
+    turns = [t for t in transcript if _is_patient(t) and t.get("text")]
+    # ponytail: refusal = refusal keyword within the first couple of replies;
+    # the GPT path does this semantically.
+    if len(turns) <= 2 and any(k in text for k in REFUSE_KW):
+        return _failed("refused", "Bệnh nhân từ chối nhận cuộc gọi.", "heuristic")
     tier = "green"
     if any(k in text for k in AMBER_KW):
         tier = "amber"
@@ -43,7 +57,7 @@ def _heuristic(transcript: list[dict]) -> dict:
     body = " ".join(said)[:280]
     summary = f"Bệnh nhân cho biết: {body} → phân loại {label}."
     return {"summary": summary, "tier": tier, "escalated": tier == "red",
-            "extracted": {}, "source": "heuristic"}
+            "extracted": {}, "call_status": "completed", "source": "heuristic"}
 
 
 def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
@@ -57,7 +71,7 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
     if questions:
         vars_block = "\n".join(f"- {q['expected_var']}: {q['text']}" for q in questions)
         extract_task = (
-            "; (3) với MỖI biến dưới đây, trích ngắn gọn điều bệnh nhân trả lời "
+            "; (4) với MỖI biến dưới đây, trích ngắn gọn điều bệnh nhân trả lời "
             "(vd \"không\", \"có - sốt 38 độ\"; null nếu chưa hỏi hoặc không trả lời):\n"
             f"{vars_block}\n"
         )
@@ -65,9 +79,13 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
         "Bạn là điều dưỡng theo dõi hậu phẫu. Dưới đây là bản ghi cuộc gọi theo dõi "
         "giữa trợ lý và bệnh nhân. Hãy: (1) tóm tắt ngắn gọn tình trạng bệnh nhân bằng "
         "tiếng Việt; (2) phân loại mức nguy cơ 'red' (nguy cơ cao, cần bác sĩ xử lý ngay), "
-        "'amber' (cần theo dõi thêm) hoặc 'green' (ổn định)"
+        "'amber' (cần theo dõi thêm) hoặc 'green' (ổn định); "
+        "(3) đánh giá kết quả cuộc gọi 'call_status': 'refused' nếu bệnh nhân từ chối "
+        "nhận cuộc gọi hoặc không đồng ý ghi âm, 'no_answer' nếu bệnh nhân không trả lời "
+        "được câu hỏi nào, 'completed' nếu cuộc gọi diễn ra bình thường"
         f"{extract_task}. "
-        'Trả về JSON: {"summary":"...","tier":"red|amber|green","escalated":true/false'
+        'Trả về JSON: {"summary":"...","tier":"red|amber|green","escalated":true/false,'
+        '"call_status":"completed|refused|no_answer"'
         + (',"extracted":{"ten_bien":"trả lời"}' if questions else "") + "}.\n\n"
         f"BẢN GHI:\n{convo}"
     )
@@ -78,6 +96,11 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
         temperature=0.2,
     )
     data = json.loads(resp.choices[0].message.content)
+    if data.get("call_status") in ("refused", "no_answer"):
+        fallback = ("Bệnh nhân từ chối nhận cuộc gọi."
+                    if data["call_status"] == "refused"
+                    else "Không nhận được câu trả lời từ bệnh nhân.")
+        return _failed(data["call_status"], data.get("summary") or fallback, "gpt")
     tier = data.get("tier") if data.get("tier") in ("red", "amber", "green") else "amber"
     extracted = data.get("extracted")
     return {
@@ -86,6 +109,7 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
         "escalated": bool(data.get("escalated")) or tier == "red",
         "extracted": {k: v for k, v in extracted.items() if v is not None}
                      if isinstance(extracted, dict) else {},
+        "call_status": "completed",
         "source": "gpt",
     }
 
@@ -93,6 +117,10 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
 def analyze(transcript: list[dict], questions: list[dict] | None = None) -> dict:
     """questions: [{"text", "expected_var"}] — when given, the GPT path also
     extracts each variable's answer into result["extracted"]."""
+    # No patient speech at all (hung up / never answered) — deterministic, no GPT.
+    if not _patient_text(transcript).strip():
+        return _failed("no_answer",
+                       "Không nhận được câu trả lời từ bệnh nhân.", "rule")
     if settings.OPENAI_API_KEY:
         try:
             return _gpt(transcript, questions)
@@ -109,5 +137,9 @@ if __name__ == "__main__":  # tiny self-check
     r = _heuristic(t)
     assert r["tier"] == "red" and r["escalated"], r
     g = _heuristic([{"who": "Trợ lý", "text": "?"}, {"who": "BN", "text": "Tôi khỏe, ăn uống tốt."}])
-    assert g["tier"] == "green", g
+    assert g["tier"] == "green" and g["call_status"] == "completed", g
+    na = analyze([{"who": "Trợ lý", "text": "Xin chào..."}])
+    assert na["call_status"] == "no_answer" and na["tier"] is None and na["extracted"] == {}, na
+    rf = _heuristic([{"who": "Trợ lý", "text": "...đồng ý chứ ạ?"}, {"who": "BN", "text": "Tôi từ chối."}])
+    assert rf["call_status"] == "refused" and rf["tier"] is None, rf
     print("call_analysis self-check OK")

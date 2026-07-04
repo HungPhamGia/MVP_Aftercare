@@ -25,6 +25,11 @@ const API = {
 
 /* ---- mappers ---------------------------------------------------------- */
 function tierToRisk(t) { return (t === "red" || t === "amber" || t === "green") ? t : "unknown"; }
+/* failed-call reasons (call_results.call_status) shown instead of "Đã gọi" */
+const CALL_FAIL = {
+  refused:   "Gọi thất bại — bệnh nhân từ chối",
+  no_answer: "Gọi thất bại — không có câu trả lời",
+};
 function fmtDate(iso) {
   if (!iso) return "—";
   const [y, m, d] = String(iso).slice(0, 10).split("-");
@@ -66,7 +71,8 @@ function mapRosterRow(r) {
     dischargeDate: fmtDate(r.ngay_xuat_vien), day: daysSince(r.ngay_xuat_vien),
     reExam: fmtDate(r.lich_tai_kham),
     phonePatient: r.sdt_benh_nhan || "—", phoneFamily: r.sdt_nguoi_nha || "—",
-    lastContact: r.last_call_at ? "Đã gọi" : "Chưa gọi",
+    lastContact: CALL_FAIL[r.last_call_status] || (r.last_call_at ? "Đã gọi" : "Chưa gọi"),
+    lastCallFailed: !!CALL_FAIL[r.last_call_status],
     reason: r.latest_summary || r.phau_thuat || "Theo dõi sau xuất viện",
     summary: r.latest_summary || r.phau_thuat || "",
     escalated: !!r.escalated,
@@ -112,7 +118,7 @@ function buildCaseFromApi(d, calls) {
     const tone = tierToRisk(c.tier);
     return {
       date: fmtDate(c.ended_at), day: daysBetween(d.ngay_xuat_vien, c.ended_at),
-      tone, outcome: RISK[tone].label, escalated: !!c.escalated,
+      tone, outcome: CALL_FAIL[c.call_status] || RISK[tone].label, escalated: !!c.escalated,
       note: c.summary || "—",
       answers: callAnswers(c),
       transcript: Array.isArray(c.transcript) ? c.transcript : [],

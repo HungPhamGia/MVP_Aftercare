@@ -53,6 +53,9 @@ class CallResult(Base):
     extracted: Mapped[dict | None] = mapped_column(JSONB)
     transcript: Mapped[list | None] = mapped_column(JSONB)
     tier: Mapped[str | None] = mapped_column(String)
+    # completed | refused | no_answer — NULL (old rows) means completed.
+    # Failed calls keep tier NULL so the patient stays "chưa đánh giá".
+    call_status: Mapped[str | None] = mapped_column(String)
     summary: Mapped[str | None] = mapped_column(Text)
     escalated: Mapped[bool | None] = mapped_column(Boolean)
     escalation_channel: Mapped[str | None] = mapped_column(String)

@@ -405,6 +405,28 @@ async function endCall() {
   }
 
   const p = DEMO.patient || { name: DEMO.maHoSo, mrn: DEMO.maHoSo };
+
+  // failed call (refused / no answer): no tier, no collected data — the patient
+  // stays "chưa đánh giá"; only the transcript + reason were saved.
+  if (res.call_status === "refused" || res.call_status === "no_answer") {
+    const reason = res.call_status === "refused"
+      ? "Bệnh nhân từ chối nhận cuộc gọi." : "Không nhận được câu trả lời từ bệnh nhân.";
+    $("#demoRoot").innerHTML = `
+      <section class="card demo-result">
+        <div class="dr-icon">📵</div>
+        <h2>Cuộc gọi không thành công</h2>
+        <p class="dr-meta">${esc(p.name)} · ${esc(p.mrn)} · ${duration}</p>
+        <span class="badge unknown">Chưa đánh giá</span>
+        <div class="summary-block"><h4>Lý do</h4>
+          <p>${esc(res.summary || reason)}</p></div>
+        <div class="dr-actions">
+          <a class="btn btn-leaf" href="case.html?id=${esc(DEMO.maHoSo)}">Xem chi tiết ca</a>
+          <button class="btn" onclick="renderSetup()">Demo lại</button>
+        </div>
+      </section>`;
+    return;
+  }
+
   const tierLabel = { red: "Nguy cơ cao", amber: "Cần theo dõi", green: "Ổn định" }[res.tier] || res.tier;
   const tierIcon = { red: "⚠", amber: "!", green: "✓" }[res.tier] || "✓";
   $("#demoRoot").innerHTML = `

@@ -7,8 +7,8 @@
 .head-meta .quick b { color: var(--ink); font-weight: 700; }
 .head-meta .quick .dot { width: 8px; height: 8px; border-radius: 50%; }
 
-/* primary alert block — highest attention */
-.board-primary { margin-bottom: 16px; }
+/* primary alert block — highest attention ("Cần bác sĩ xem" + "Gọi không thành công") */
+.board-primary { margin-bottom: 16px; display: flex; flex-direction: column; gap: 16px; }
 
 /* secondary blocks side by side: "Cuộc gọi sắp tới" | "Lịch tái khám" */
 .board-sec { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }

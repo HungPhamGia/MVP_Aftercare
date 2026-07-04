@@ -85,7 +85,7 @@ function renderList(rows) {
         <td>${esc(p.doctor)}</td>
         <td>${p.nextCall.status === "none" ? `<span class="pill muted">Chưa lên lịch</span>`
               : `${esc(p.nextCall.date)} ${esc(p.nextCall.time)} ${callPill(p.nextCall.status)}`}</td>
-        <td>${esc(p.lastContact)}</td>
+        <td>${p.lastCallFailed ? `<span class="pill red">${esc(p.lastContact)}</span>` : esc(p.lastContact)}</td>
         <td class="row-acts"><button class="btn btn-sm" data-preview="${p.mrn}">Demo gọi</button>
           <button class="btn btn-sm" data-open="${p.mrn}">Mở</button></td>
       </tr>`).join("")}

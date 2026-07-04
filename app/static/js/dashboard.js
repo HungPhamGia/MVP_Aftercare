@@ -9,6 +9,8 @@ function isToday(iso) {
 }
 function needsReview() { return PATIENTS.filter(p => p.needsReview); }
 function overdueList() { return PATIENTS.filter(p => p.overdue); }
+/* patients whose latest call failed (refused / no answer) — need a re-call */
+function failedCalls() { return PATIENTS.filter(p => p.lastCallFailed); }
 function upcomingCalls() {
   // scheduled but not yet past — overdue ones live in their own section below
   return PATIENTS.filter(p => p.nextCall.status === "scheduled" && !p.overdue)
@@ -26,7 +28,7 @@ function quickCounts(appts) {
   $("#quickCounts").innerHTML = `
     <span class="quick"><span class="dot" style="background:var(--red)"></span>Cần xem <b>${needsReview().length}</b></span>
     <span class="quick">Cuộc gọi sắp tới <b>${upcomingCalls().length}</b></span>
-    <span class="quick">Quá hạn gọi <b>${overdueList().length}</b></span>
+    <span class="quick"><span class="dot" style="background:var(--amber)"></span>Gọi không thành công <b>${failedCalls().length}</b></span>
     <span class="quick">Lịch tái khám <b>${appts.length}</b></span>
     <span class="quick">Tái khám hôm nay <b>${appts.filter(a => isToday(a.date)).length}</b></span>`;
 }
@@ -71,9 +73,20 @@ function renderBoard(appts) {
     title: p.name, meta: `${p.age}t · ${p.surgery} · ngày ${p.day}`, reason: p.reason,
     actions: [{ act: "open", label: "Xem & xử lý", cls: "btn-leaf" }, { act: "call", label: "Gọi" }],
   }));
+  /* failed calls (refused / no answer) — patient is still "chưa đánh giá" */
+  const failed = failedCalls().map(p => workItem({
+    mrn: p.mrn, tone: "amber", title: p.name,
+    meta: `${p.age}t · ${p.surgery} · ngày ${p.day}`, reason: p.lastContact,
+    actions: [{ act: "call", label: "Gọi lại", cls: "btn-leaf" }, { act: "open", label: "Mở ca" }],
+  }));
+
   $("#boardPrimary").innerHTML = section({
     title: "Cần bác sĩ xem", tone: "red", icon: "!", primary: true, items: review,
     link: "patients.html", linkText: "Tất cả bệnh nhân", empty: "Không có ca nào cần xem.",
+  }) + section({
+    title: "Gọi không thành công", tone: "amber", icon: "✕", items: failed,
+    link: "patients.html", linkText: "Tất cả bệnh nhân",
+    empty: "Không có cuộc gọi thất bại.",
   });
 
   /* SECONDARY */

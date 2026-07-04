@@ -378,8 +378,10 @@ def his_patients(db: Session = Depends(get_db)):
             "latest_tier": cr.tier if cr else None,
             "latest_summary": cr.summary if cr else None,
             "escalated": bool(cr.escalated) if cr else False,
-            # "đã gọi" vs "chưa gọi" for the roster's last-contact column
+            # "đã gọi" vs "chưa gọi" for the roster's last-contact column;
+            # refused/no_answer renders as "gọi thất bại" instead
             "last_call_at": cr.ended_at if cr else None,
+            "last_call_status": cr.call_status if cr else None,
             "next_call_at": mon.next_call_at if mon else None,
         })
     return out
@@ -720,6 +722,7 @@ def patient_call_results(ma_ho_so: str, db: Session = Depends(get_db)):
             "session_id": cr.session_id,
             "ended_at": cr.ended_at,
             "tier": cr.tier,
+            "call_status": cr.call_status,
             "summary": cr.summary,
             "escalated": bool(cr.escalated),
             "answers": _build_answers(db, cr),
@@ -733,6 +736,8 @@ def _build_answers(db: Session, cr: CallResult) -> list[dict]:
     # ponytail: assumes dict shape; non-dict raw collapses to None.
     raw = cr.raw_answers if isinstance(cr.raw_answers, dict) else {}
     extracted = cr.extracted if isinstance(cr.extracted, dict) else {}
+    if not raw and not extracted:
+        return []  # nothing collected (e.g. failed call) — no empty question list
     qset = db.get(QuestionSet, cr.question_set_id) if cr.question_set_id else None
     if qset:
         return [
@@ -777,6 +782,10 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     # extracted holds ONLY per-variable signals (GPT). raw keeps the full Q→A
     # pairs — never dump it into extracted or the case page shows the whole call.
     extracted = result.get("extracted") or None
+    # refused / no_answer: no assessment (tier stays NULL → "chưa đánh giá"),
+    # no collected data — only the transcript and the failure reason survive.
+    call_status = result.get("call_status") or "completed"
+    failed = call_status != "completed"
 
     cr = CallResult(
         ma_ho_so=body.ma_ho_so,
@@ -784,10 +793,11 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
         session_id="demo-" + now_utc().strftime("%Y%m%d%H%M%S"),
         started_at=now_utc(),
         ended_at=now_utc(),
-        raw_answers=raw or None,
-        extracted=extracted or None,
+        raw_answers=None if failed else (raw or None),
+        extracted=None if failed else extracted,
         transcript=body.transcript,
         tier=result["tier"],
+        call_status=call_status,
         summary=result["summary"],
         escalated=result["escalated"],
         escalation_channel="Bác sĩ phụ trách" if result["escalated"] else None,
@@ -797,7 +807,8 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     db.refresh(cr)
     return {
         "call_id": cr.id, "tier": result["tier"], "summary": result["summary"],
-        "escalated": result["escalated"], "source": result["source"],
+        "escalated": result["escalated"], "call_status": call_status,
+        "source": result["source"],
     }
 
 
