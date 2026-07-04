@@ -64,7 +64,7 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 
 ## 🏗 Kiến trúc
 
-![Kiến trúc và luồng dữ liệu — mô hình BFF, lớp chặn PHI, TLS toàn tuyến](docs/so_do_kien_truc_bao_mat.svg)
+![Kiến trúc và luồng dữ liệu — mô hình BFF, lớp chặn PHI, TLS toàn tuyến](docs/so_do_kien_truc.png)
 
 Luồng nghiệp vụ: **xem bệnh nhân → sinh & duyệt câu hỏi → voicebot gọi → phân tích, phân tầng
 nguy cơ → dashboard & cảnh báo → đóng ca / đặt lịch gọi tiếp**.
@@ -211,7 +211,7 @@ Secret chỉ nằm trong `.env` (gitignored). Trình duyệt **không bao giờ*
 
 Lộ trình hạ tầng khi triển khai thực tế (100% đặt tại Việt Nam):
 
-![Lộ trình hạ tầng — MVP demo → triển khai thực tế tại Việt Nam](docs/so_do_lo_trinh_ha_tang.svg)
+![Lộ trình hạ tầng — MVP demo → triển khai thực tế tại Việt Nam](docs/ha_tang.png)
 
 ---
 
