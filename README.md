@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo_aftercare.jpg" width="180" alt="Logo AfterCare"/>
+
 # 🏥 AfterCare Voicebot
 
 **Voicebot AI gọi điện theo dõi bệnh nhân sau xuất viện — tóm tắt cuộc gọi, phân tầng nguy cơ, cảnh báo bác sĩ.**
@@ -22,6 +24,7 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 ## 📋 Mục lục
 
 - [Tính năng](#-tính-năng)
+- [Giao diện demo](#️-giao-diện-demo)
 - [Kiến trúc](#-kiến-trúc)
 - [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
 - [Bắt đầu nhanh](#-bắt-đầu-nhanh)
@@ -48,6 +51,16 @@ tự tóm tắt hội thoại, phân loại nguy cơ 🟢 / 🟡 / 🔴 và đ�
 - **🔒 An toàn dữ liệu** — mọi secret (OpenAI, VNPT, DB) chỉ ở server; trình duyệt chỉ gọi
   endpoint của app (mô hình BFF). PHI nhạy cảm (`so_the_bhyt`, ICD, xét nghiệm) không bao giờ
   gửi cho bot hay lộ ra API.
+
+## 🖥️ Giao diện demo
+
+**Dashboard bệnh nhân** — tầng nguy cơ 🟢🟡🔴, lần gọi cuối, lịch gọi kế tiếp, ca quá hạn:
+
+![Dashboard danh sách bệnh nhân](docs/danh_sach_benh_nhan.png)
+
+**Cuộc gọi demo với voicebot** — mở đầu xin phép ghi âm, hỏi theo bộ câu hỏi bác sĩ đã duyệt:
+
+![Màn hình cuộc gọi demo với voicebot](docs/demo_cuoc_goi.png)
 
 ## 🏗 Kiến trúc
 
@@ -117,6 +130,8 @@ Mở <http://localhost:8000> — frontend được FastAPI serve luôn. Swagger 
 ```bash
 python test_app.py
 ```
+
+![Kết quả chạy test: 13/13 pass, DB không bị thay đổi](docs/test_screenshot.png)
 
 ## ⚙️ Biến môi trường
 
@@ -201,5 +216,8 @@ Lộ trình hạ tầng khi triển khai thực tế (100% đặt tại Việt N
 ---
 
 <div align="center">
+
+<img src="docs/logo_team.png" width="110" alt="Logo nhóm"/>
+
 <sub>MVP demo — không dùng cho chẩn đoán y khoa. Voicebot chỉ hỏi thăm và chuyển thông tin cho bác sĩ phụ trách.</sub>
 </div>
