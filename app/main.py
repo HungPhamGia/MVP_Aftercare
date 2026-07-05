@@ -952,12 +952,13 @@ def bff_conversation(body: ConversationIn, db: Session = Depends(get_db)):
 
 # --- SmartVoice STT/TTS BFF (creds server-side; browser falls back to Web Speech) ---
 async def _warm_opening_tts():
-    """Pre-generate (and cache) the fixed consent opening so the first bot
-    line plays instantly instead of waiting on VNPT generation."""
-    try:
-        await smartvoice.tts(gptbot.OPENING)
-    except Exception:  # noqa: BLE001 — warmup is best-effort
-        pass
+    """Pre-generate (and cache) every pronoun variant of the consent opening
+    so the first bot line plays instantly whoever the patient is."""
+    for line in gptbot.OPENING_VARIANTS:
+        try:
+            await smartvoice.tts(line)
+        except Exception:  # noqa: BLE001 — warmup is best-effort
+            pass
 
 
 @app.get("/bff/voice-config")

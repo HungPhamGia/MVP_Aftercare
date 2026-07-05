@@ -168,20 +168,37 @@ function startListening() {
   DEMO.sttOn ? svStartMic() : webStartMic();
 }
 
+/* Pronoun pair (bot self, patient) — mirrors gptbot._address so the lines
+   spoken from the client match the bot's in-call xưng hô. */
+function addressPair() {
+  const p = DEMO.patient || {};
+  const age = parseInt(p.age, 10), nu = /nữ/i.test(p.sex || "");
+  if (!age) return ["em", "anh chị"];
+  if (age >= 60) return ["cháu", "bác"];
+  if (age >= 40) return ["cháu", nu ? "cô" : "chú"];
+  if (age >= 18) return ["em", nu ? "chị" : "anh"];
+  return ["chị", "em"];
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
 /* STT heard nothing / couldn't recognize → the bot SAYS it didn't hear
    (a toast is invisible on a phone call), then reopens the mic. Rotating
    phrasings so it sounds human; after 3 misses just keep the line open
    silently instead of nagging. */
-const RETRY_LINES = [
-  "Dạ cháu xin lỗi, cháu chưa nghe rõ, mình có thể nhắc lại được không ạ?",
-  "Alo, cháu chưa nghe được mình nói ạ, mình nói lại giúp cháu với ạ.",
-  "Dạ mình nói lại giúp cháu một lần nữa được không ạ? Cháu nghe chưa được rõ.",
-];
+function retryLines() {
+  const [me, you] = addressPair();
+  return [
+    `Dạ ${me} xin lỗi, ${me} chưa nghe rõ, ${you} có thể nhắc lại được không ạ?`,
+    `Alo, ${me} chưa nghe được ${you} nói ạ, ${you} nói lại giúp ${me} với ạ.`,
+    `Dạ ${you} nói lại giúp ${me} một lần nữa được không ạ? ${cap(me)} nghe chưa được rõ.`,
+  ];
+}
 function askRepeat() {
   if (DEMO.phase !== "calling" || !DEMO.awaiting) return;
   DEMO.misses += 1;
-  if (DEMO.misses > RETRY_LINES.length) { startListening(); return; }
-  botTurn(RETRY_LINES[DEMO.misses - 1], true);
+  const lines = retryLines();
+  if (DEMO.misses > lines.length) { startListening(); return; }
+  botTurn(lines[DEMO.misses - 1], true);
 }
 
 /* Send one turn to the Smartbot BFF and render its reply. */
