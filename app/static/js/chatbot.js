@@ -458,7 +458,7 @@ async function endCall() {
       <p class="dr-meta">${esc(p.name)} · ${esc(p.mrn)} · ${duration}</p>
       <span class="badge ${esc(res.tier)}">${esc(tierLabel)}</span>
       ${res.escalated ? `<div class="callout red"><b>⚠ Đã nâng cảnh báo</b> — cần bác sĩ phụ trách xem sớm.</div>` : ""}
-      <div class="summary-block"><h4>Tóm tắt cuộc gọi ${res.source === "gpt" ? "(GPT)" : "(tự động)"}</h4>
+      <div class="summary-block"><h4>Tóm tắt cuộc gọi ${res.source === "gpt" ? "" : "(tự động)"}</h4>
         <p>${esc(res.summary)}</p></div>
       <div class="dr-actions">
         <a class="btn btn-leaf" href="case.html?id=${esc(DEMO.maHoSo)}">Xem chi tiết ca</a>
