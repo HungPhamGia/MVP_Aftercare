@@ -41,7 +41,7 @@ tự tóm tắt hội thoại, phân loại nguy cơ và đẩy cảnh báo nh�
   (phẫu thuật, thuốc kê, ghi chú theo dõi). Bác sĩ chỉnh sửa rồi duyệt mới dùng để gọi.
 - **Voicebot GPT** — mở đầu bằng câu xin phép ghi âm cố định, xác nhận danh tính, hỏi lần
   lượt các câu đã duyệt, được phép hỏi làm rõ nhưng **không chẩn đoán**.
-- ** Giọng nói tiếng Việt** — STT/TTS qua VNPT SmartVoice (nhiều giọng vùng miền); thiếu
+- **Giọng nói tiếng Việt** — STT/TTS qua VNPT SmartVoice (nhiều giọng vùng miền); thiếu
   cấu hình thì trình duyệt tự fallback Web Speech API — demo vẫn chạy.
 - **Phân tích cuộc gọi** — tóm tắt hội thoại, trích đáp án theo từng biến (`sot`, `vet_mo`,…),
   phân tầng nguy cơ và cờ chuyển bác sĩ. Có GPT thì dùng GPT, không thì heuristic từ khóa —
