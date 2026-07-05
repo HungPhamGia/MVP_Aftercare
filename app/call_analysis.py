@@ -69,10 +69,17 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
     convo = "\n".join(f"{t.get('who')}: {t.get('text')}" for t in transcript)
     extract_task = ""
     if questions:
-        vars_block = "\n".join(f"- {q['expected_var']}: {q['text']}" for q in questions)
+        vars_block = "\n".join(
+            f"- {q['expected_var']}: {q['text']}" if q.get("expected_var")
+            else f"- (tự đặt nhãn): {q['text']}"
+            for q in questions)
         extract_task = (
-            "; (4) với MỖI biến dưới đây, trích ngắn gọn điều bệnh nhân trả lời "
-            "(vd \"không\", \"có - sốt 38 độ\"; null nếu chưa hỏi hoặc không trả lời):\n"
+            "; (4) trích 'extracted': với MỖI câu hỏi dưới đây mà bệnh nhân ĐÃ trả lời, "
+            "thêm một cặp khóa-giá trị — khóa là tên biến cho sẵn; câu ghi '(tự đặt nhãn)' "
+            "thì tự đặt nhãn tiếng Việt ngắn 1-3 từ làm khóa (vd \"Sốt\", \"Vết mổ\"); "
+            "giá trị là câu trả lời tóm gọn (vd \"không\", \"có - sốt 38 độ\"). "
+            "BỎ QUA câu chưa hỏi hoặc không có câu trả lời. Nếu bệnh nhân nêu dấu hiệu "
+            "quan trọng ngoài các câu hỏi, thêm nhãn riêng cho dấu hiệu đó:\n"
             f"{vars_block}\n"
         )
     prompt = (

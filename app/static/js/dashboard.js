@@ -7,7 +7,11 @@ function isToday(iso) {
   if (!iso) return false;
   return new Date(iso).toDateString() === new Date().toDateString();
 }
-function needsReview() { return PATIENTS.filter(p => p.needsReview); }
+function needsReview() {
+  const rank = { red: 0, amber: 1, green: 2, unknown: 3 };
+  return PATIENTS.filter(p => p.needsReview)
+    .sort((a, b) => (rank[a.risk] - rank[b.risk]) || (b.escalated - a.escalated));
+}
 function overdueList() { return PATIENTS.filter(p => p.overdue); }
 /* patients whose latest call failed (refused / no answer) — need a re-call */
 function failedCalls() { return PATIENTS.filter(p => p.lastCallFailed); }

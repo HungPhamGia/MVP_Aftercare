@@ -78,9 +78,10 @@ function renderMain() {
       }).join("")}
     </section>` : "";
 
-  const collectedHtml = C.slots.length ? `
+  const collectedHtml = (C.slots.length || p.summary) ? `
     <section class="card sec">
       <span class="panel-title">Thông tin thu thập ở cuộc gọi gần nhất</span>
+      ${p.summary ? `<div class="summary-block"><h4>Tóm tắt cuộc gọi</h4><p>${esc(p.summary)}</p></div>` : ""}
       ${C.slots.map(s => `<div class="slot-row"><span class="label">${esc(s.label)}</span>
         <span class="value ${s.tone}">${esc(s.value)}</span></div>`).join("")}
     </section>` : "";

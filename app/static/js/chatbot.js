@@ -150,14 +150,15 @@ function renderTranscript() {
 
 function setInterim(t) { DEMO.interim = t || ""; renderTranscript(); }
 
-function botTurn(text, isQuestion) {
+function botTurn(text, isQuestion, onDone) {
   DEMO.transcript.push({ who: "Trợ lý", text }); // bot lines live in the chat panel only
   renderTranscript();
   DEMO.awaiting = !!isQuestion;
   const st = $("#phStatus");
   if (st) st.textContent = isQuestion ? "Đang chờ bệnh nhân trả lời…" : "Đang gọi…";
-  // Speech-to-speech: once the bot finishes talking, open the mic.
-  speak(text, () => { if (isQuestion) startListening(); });
+  // Speech-to-speech: once the bot finishes talking, open the mic (question)
+  // or run the follow-up (goodbye/handoff) — never cut the audio short.
+  speak(text, () => { if (isQuestion) startListening(); else if (onDone) onDone(); });
 }
 
 /* Auto-open the mic (SmartVoice or Web Speech) while an answer is expected. */
@@ -197,14 +198,21 @@ async function botAsk(text, firstTurn) {
     return;
   }
   if (DEMO.phase !== "calling") return; // hung up while waiting
-  if (r.text) { DEMO.lastQ = r.text; botTurn(r.text, !r.done && !r.handoff); }
+  // Hang up only AFTER the goodbye finished playing (the old fixed timers cut
+  // the last sentence off). With TTS muted, leave time to read the line.
+  const endAfter = () => setTimeout(() => endCall(), DEMO.ttsOn ? 900 : 3000);
   if (r.handoff) {
-    botTurn("⚠ Cuộc gọi được chuyển cho điều dưỡng trực.", false);
-    setTimeout(() => endCall(), 2200);
+    const bye = "⚠ Cuộc gọi được chuyển cho điều dưỡng trực.";
+    if (r.text) botTurn(r.text, false, () => botTurn(bye, false, endAfter));
+    else botTurn(bye, false, endAfter);
   } else if (r.done) {
     // Bot said goodbye (refusal, wrong number, or all questions done) → hang up.
     const st = $("#phStatus"); if (st) st.textContent = "Cuộc gọi kết thúc…";
-    setTimeout(() => endCall(), 3500);
+    if (r.text) botTurn(r.text, false, endAfter);
+    else endAfter();
+  } else if (r.text) {
+    DEMO.lastQ = r.text;
+    botTurn(r.text, true);
   }
 }
 

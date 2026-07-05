@@ -739,16 +739,14 @@ def _build_answers(db: Session, cr: CallResult) -> list[dict]:
     extracted = cr.extracted if isinstance(cr.extracted, dict) else {}
     if not raw and not extracted:
         return []  # nothing collected (e.g. failed call) — no empty question list
+    # Signals only, never the full question list: show what was actually
+    # extracted (raw Q→A pairs only when nothing was), labeled by the matching
+    # question when the key is a known expected_var, else the key itself.
     qset = db.get(QuestionSet, cr.question_set_id) if cr.question_set_id else None
     if qset:
-        return [
-            {"question": q.text, "expected_var": q.expected_var,
-             "raw": raw.get(q.expected_var), "value": extracted.get(q.expected_var)}
-            for q in qset.questions
-        ]
-    # No stored set (template-driven call): show the extracted signals labeled
-    # via the same core+generic vars; raw Q→A pairs only when nothing extracted.
-    labels = {q["expected_var"]: q["text"] for q in [*CORE, *TEMPLATE]}
+        labels = {q.expected_var: q.text for q in qset.questions if q.expected_var}
+    else:
+        labels = {q["expected_var"]: q["text"] for q in [*CORE, *TEMPLATE]}
     keys = list(extracted) or list(raw)
     return [
         {"question": labels.get(k), "expected_var": k,
@@ -766,8 +764,10 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
     from app import call_analysis
     qset = approved_question_set(db, body.ma_ho_so)
     if qset:
+        # Questions without an expected_var still take part — GPT names the
+        # signal itself (a short label), so extraction never silently skips.
         qspecs = [{"text": q.text, "expected_var": q.expected_var}
-                  for q in qset.questions if q.expected_var]
+                  for q in qset.questions]
     else:
         # ponytail: no approved set → extract the deterministic core+generic vars.
         # AI-personalized extras still land in transcript/summary, just unkeyed.
