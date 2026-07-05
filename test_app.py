@@ -263,6 +263,54 @@ def test_templates_crud():
         assert not any(t["id"] == tid for t in client.get("/his/templates").json())
 
 
+def test_escalation_rules_crud():
+    """Quy tắc cảnh báo (giao thức): tạo → sửa → đọc lại đúng → xóa; sửa/xóa id không tồn tại → 404."""
+    with rollback_db():
+        r = client.post("/his/escalation-rules", json={
+            "name": "Test rule", "risk": "red", "when_text": "sốt cao",
+            "recipients": ["Bác sĩ phụ trách"]})
+        assert r.status_code == 200, r.text
+        rid = r.json()["id"]
+        assert client.put(f"/his/escalation-rules/{rid}", json={
+            "name": "Test rule v2", "risk": "amber"}).status_code == 200
+        rule = next(x for x in client.get("/his/escalation-rules").json() if x["id"] == rid)
+        assert rule["name"] == "Test rule v2" and rule["risk"] == "amber"
+        assert client.delete(f"/his/escalation-rules/{rid}").json() == {"deleted": rid}
+        assert client.put("/his/escalation-rules/99999999", json={"name": "x"}).status_code == 404
+        assert client.delete("/his/escalation-rules/99999999").status_code == 404
+
+
+def test_call_settings_roundtrip():
+    """Cấu hình cuộc gọi AI (giờ gọi / retry / ngày nghỉ): lưu rồi đọc lại đúng."""
+    with rollback_db():
+        cfg = {"working_hours": {"start": "08:00", "end": "17:00"},
+               "retry": {"max": 2}, "blackout": ["2099-01-01"]}
+        assert client.put("/his/call-settings", json=cfg).status_code == 200
+        assert client.get("/his/call-settings").json() == cfg
+
+
+def test_call_manual_save():
+    """Cuộc gọi thủ công: bác sĩ chọn kết quả → red có cờ chuyển; outcome lạ → 422; không liên lạc được → không phân tầng + vào nhóm cảnh báo 'Gọi thất bại'."""
+    with rollback_db():
+        mhs = first_mhs()
+        r = client.post("/his/call-manual/save", json={
+            "ma_ho_so": mhs, "outcome": "red", "note": "Bệnh nhân đau nhiều, hẹn khám ngay"})
+        assert r.status_code == 200, r.text
+        assert r.json()["tier"] == "red"
+        row = patient_row(mhs)
+        assert row["latest_tier"] == "red" and row["escalated"]
+
+        assert client.post("/his/call-manual/save", json={
+            "ma_ho_so": mhs, "outcome": "xyz"}).status_code == 422
+
+        r = client.post("/his/call-manual/save", json={"ma_ho_so": mhs, "outcome": "no_contact"})
+        assert r.status_code == 200 and r.json()["tier"] is None
+        assert r.json()["call_status"] == "no_answer"
+        groups = client.get("/his/notifications").json()
+        failed = next((g for g in groups if g["group"] == "Gọi thất bại"), None)
+        assert failed and any(i["ma_ho_so"] == mhs for i in failed["items"])
+
+
 TESTS = [
     test_call_analysis_heuristic,
     test_connection_lists_records,
@@ -277,6 +325,9 @@ TESTS = [
     test_question_lifecycle,
     test_patient_question_set,
     test_templates_crud,
+    test_escalation_rules_crud,
+    test_call_settings_roundtrip,
+    test_call_manual_save,
 ]
 
 if __name__ == "__main__":

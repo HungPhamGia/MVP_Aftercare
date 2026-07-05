@@ -124,7 +124,7 @@ uvicorn app.main:app --reload
 
 Mở <http://localhost:8000> — frontend được FastAPI serve luôn. Swagger UI tại `/docs`.
 
-**Test tự động** — 13 test: logic phân loại (offline), smoke read-only, và toàn bộ endpoint ghi
+**Test tự động** — 16 test: logic phân loại (offline), smoke read-only, và toàn bộ endpoint ghi
 (mỗi test bọc trong transaction rollback nên **không để lại dữ liệu** trong DB):
 
 ```bash
@@ -158,6 +158,8 @@ Secret chỉ nằm trong `.env` (gitignored). Trình duyệt **không bao giờ*
 | `GET /his/patient/{ma_ho_so}/call-results` | Lịch sử cuộc gọi: transcript, đáp án, tóm tắt |
 | `GET /his/patient/{ma_ho_so}/call-preview` | Kịch bản cuộc gọi sắp tới (read-only) |
 | `GET/POST/PUT/DELETE /his/templates` | Bộ câu hỏi mẫu theo bệnh |
+| `GET/POST/PUT/DELETE /his/escalation-rules` | Quy tắc cảnh báo & chuyển bác sĩ (giao thức) |
+| `GET/PUT /his/call-settings` | Cấu hình cuộc gọi AI: giờ gọi, retry, ngày nghỉ |
 | `GET /his/performance` · `/his/notifications` · `/his/appointments` | Số liệu, cảnh báo, lịch tái khám |
 
 </details>
@@ -184,6 +186,7 @@ Secret chỉ nằm trong `.env` (gitignored). Trình duyệt **không bao giờ*
 | `POST /bff/stt` · `POST /bff/tts` | Proxy VNPT SmartVoice |
 | `GET /bff/voice-config` | Cho frontend biết STT/TTS nào đã cấu hình |
 | `POST /his/call-demo/save` | Lưu cuộc gọi demo: phân tích + ghi `call_results` |
+| `POST /his/call-manual/save` | Lưu kết quả cuộc gọi thủ công (bác sĩ tự gọi, tự chọn kết quả) |
 
 </details>
 
