@@ -8,9 +8,20 @@ TTS: POST text → a public audio_link (wav on idg-obs.vnpt.vn, valid 24h) that 
 Creds (access_token / token_id / token_key) stay server-side — same reason the
 Smartbot BFF kept them off the browser. Spec: SmartVoice/ docs, VNPT API v1.0.
 """
+import time
+
 import httpx
 
 from app.config import settings
+
+# Shared keep-alive client: a fresh TLS handshake to api.idg.vnpt.vn per call
+# added ~0.1-0.3s to every STT/TTS round trip.
+_client = httpx.AsyncClient(timeout=60)
+
+# TTS audio links stay valid 24h on VNPT's OBS — repeated lines (the fixed
+# consent opening, the "please repeat" phrases) can skip generation entirely.
+_TTS_TTL = 20 * 3600  # refresh well before the 24h link expiry
+_tts_cache: dict[tuple, tuple[float, str]] = {}
 
 
 def _headers(access: str, token_id: str, token_key: str, json: bool = False) -> dict:
@@ -51,24 +62,31 @@ async def stt(audio: bytes, filename: str, client_session: str) -> str:
     headers = _headers(settings.SMARTVOICE_STT_ACCESS_TOKEN,
                        settings.SMARTVOICE_STT_TOKEN_ID, settings.SMARTVOICE_STT_TOKEN_KEY)
     files = {"audioFile": (filename or "audio.wav", audio, "audio/wav")}
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, headers=headers, files=files,
-                              data={"clientSession": client_session or "sess"})
-        r.raise_for_status()
-        return _parse_stt(r.json())
+    r = await _client.post(url, headers=headers, files=files,
+                           data={"clientSession": client_session or "sess"})
+    r.raise_for_status()
+    return _parse_stt(r.json())
 
 
 async def tts(text: str, region: str = "", speed: str = "") -> str:
+    key = (text, region or settings.SMARTVOICE_TTS_REGION,
+           speed or settings.SMARTVOICE_TTS_SPEED)
+    hit = _tts_cache.get(key)
+    if hit and time.time() - hit[0] < _TTS_TTL:
+        return hit[1]
     url = f"{settings.SMARTVOICE_BASE_URL}/tts-service/v2/standard"
     headers = _headers(settings.SMARTVOICE_TTS_ACCESS_TOKEN, settings.SMARTVOICE_TTS_TOKEN_ID,
                        settings.SMARTVOICE_TTS_TOKEN_KEY, json=True)
     body = {"text": text, "text_split": False, "model": "news",
-            "speed": speed or settings.SMARTVOICE_TTS_SPEED,
-            "region": region or settings.SMARTVOICE_TTS_REGION}
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, headers=headers, json=body)
-        r.raise_for_status()
-        return _parse_tts(r.json())
+            "speed": key[2], "region": key[1]}
+    r = await _client.post(url, headers=headers, json=body)
+    r.raise_for_status()
+    link = _parse_tts(r.json())
+    if link:
+        if len(_tts_cache) > 256:  # ponytail: crude cap; hot lines re-warm in one call
+            _tts_cache.clear()
+        _tts_cache[key] = (time.time(), link)
+    return link
 
 
 if __name__ == "__main__":  # parse self-check against the doc sample payloads

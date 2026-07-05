@@ -286,7 +286,11 @@ function webStartMic() {
 }
 
 // ponytail: RMS gate + trailing-silence window; tune if auto-stop misfires per mic.
-const SV_RMS = 0.015, SV_SILENCE_MS = 1800;
+// 1100ms: long enough for a mid-sentence breath, was 1800 (0.7s dead wait/turn).
+const SV_RMS = 0.015, SV_SILENCE_MS = 1100;
+// STT only needs speech bandwidth — upload 16 kHz instead of the 48 kHz mic
+// rate: ~3× smaller payload, less audio for VNPT to chew through.
+const SV_TARGET_RATE = 16000;
 
 /* SmartVoice STT: record mic as PCM16 mono WAV in-browser (no libs), POST to
    /bff/stt which forwards to VNPT. Auto-stops after trailing silence once the
@@ -320,7 +324,8 @@ async function svStopAndSend() {
   DEMO.recCtx = null; setMic(false);
   r.proc.disconnect(); r.source.disconnect(); r.sink.disconnect();
   r.stream.getTracks().forEach(t => t.stop());
-  const wav = encodeWav(r.chunks, r.rate);
+  const ds = downsample(r.chunks, r.rate, SV_TARGET_RATE);
+  const wav = encodeWav(ds.chunks, ds.rate);
   r.ctx.close();
   if (!wav.byteLength) { setInterim(""); askRepeat(); return; }
 
@@ -340,6 +345,23 @@ async function svStopAndSend() {
     toast("Lỗi nhận dạng giọng nói: " + e.message);
     askRepeat(); // keep the call alive; typing still works
   }
+}
+
+/* Linear-interpolation resample of Float32 chunks down to `target` Hz.
+   ponytail: no anti-alias low-pass — fine for speech STT; add one if VNPT
+   accuracy ever drops vs the raw 48k upload. */
+function downsample(chunks, rate, target) {
+  if (rate <= target) return { chunks, rate };
+  let len = 0; for (const c of chunks) len += c.length;
+  const all = new Float32Array(len);
+  let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  const ratio = rate / target;
+  const out = new Float32Array(Math.floor(len / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const pos = i * ratio, lo = Math.floor(pos), hi = Math.min(lo + 1, len - 1);
+    out[i] = all[lo] + (all[hi] - all[lo]) * (pos - lo);
+  }
+  return { chunks: [out], rate: target };
 }
 
 /* Float32 PCM chunks → 16-bit mono WAV bytes at the given sample rate. */

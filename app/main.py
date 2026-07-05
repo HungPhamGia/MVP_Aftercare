@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -845,8 +846,21 @@ def bff_conversation(body: ConversationIn, db: Session = Depends(get_db)):
 
 
 # --- SmartVoice STT/TTS BFF (creds server-side; browser falls back to Web Speech) ---
+async def _warm_opening_tts():
+    """Pre-generate (and cache) the fixed consent opening so the first bot
+    line plays instantly instead of waiting on VNPT generation."""
+    try:
+        await smartvoice.tts(gptbot.OPENING)
+    except Exception:  # noqa: BLE001 — warmup is best-effort
+        pass
+
+
 @app.get("/bff/voice-config")
-def voice_config():
+async def voice_config():
+    # The demo page fetches this on load — the user is still on the patient
+    # picker, which is exactly when to warm the opening line.
+    if settings.smartvoice_tts_configured:
+        asyncio.create_task(_warm_opening_tts())
     return {"stt": settings.smartvoice_stt_configured, "tts": settings.smartvoice_tts_configured}
 
 
