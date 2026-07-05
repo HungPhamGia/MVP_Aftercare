@@ -14,6 +14,7 @@ RED_KW = [
     "chảy dịch", "chảy mủ", " mủ", "khó thở", "đau ngực", "chảy máu",
     "huyết khối", "tím", "39°", "39 độ", "38.5", "38.6", "38.7", "38.8", "38.9",
     "ngất", "co giật", "lơ mơ",
+    "đau dữ dội", "rất đau", "đau không chịu", "đau không đỡ", "đau không giảm",
 ]
 AMBER_KW = [
     "sốt", "đau tăng", "sưng", "tê", "đỏ", "khàn", "chóng mặt",
@@ -89,9 +90,9 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
         "giữa trợ lý và bệnh nhân. Hãy: (1) tóm tắt ngắn gọn tình trạng bệnh nhân bằng "
         "tiếng Việt; (2) phân loại mức nguy cơ 'tier' THEO ĐÚNG TIÊU CHÍ SAU:\n"
         "- 'red': BẤT KỲ câu trả lời nào có dấu hiệu nguy hiểm — khó thở, đau ngực, "
-        "chảy máu, sốt từ 38.5°C, vết mổ chảy mủ/dịch hôi/sưng đỏ lan rộng, đau dữ dội "
-        "không giảm dù dùng thuốc, ngất/lơ mơ/co giật, bắp chân sưng nóng đau một bên, "
-        "hoặc dấu hiệu nặng tương đương;\n"
+        "chảy máu, sốt từ 38.5°C, vết mổ chảy mủ/dịch hôi/sưng đỏ lan rộng, ĐAU DỮ DỘI, "
+        "đau nhiều, đau ngày càng tăng hoặc không giảm dù đã dùng thuốc, ngất/lơ mơ/co giật, "
+        "bắp chân sưng nóng đau một bên, hoặc dấu hiệu nặng tương đương;\n"
         "- 'amber': không có dấu hiệu nguy hiểm nhưng có ít nhất MỘT bất thường nhẹ — "
         "sốt nhẹ dưới 38.5°C, đau tăng/sưng nhẹ, KHÔNG uống đủ thuốc (quên, bỏ, tự ngừng), "
         "ăn kém, mất ngủ kéo dài, vết mổ hơi đỏ, lo lắng nhiều;\n"
