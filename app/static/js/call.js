@@ -47,14 +47,14 @@ function renderCall() {
       ${contactRow("Người nhà", ph.family)}
 
       <div class="call-field"><span>Ghi chú cuộc gọi</span>
-        <textarea id="callNote" placeholder="Ghi nhận triệu chứng, dặn dò, cam kết của bệnh nhân…">${esc(p.reason ? "Lý do theo dõi: " + p.reason : "")}</textarea></div>
+        <textarea id="callNote" placeholder="Ghi nhận triệu chứng, dặn dò, cam kết của bệnh nhân…"></textarea></div>
 
       <div class="call-field"><span>Kết quả cuộc gọi</span>
         <select id="callOutcome">
-          <option>Ổn định — tiếp tục theo dõi</option>
-          <option>Cần theo dõi thêm</option>
-          <option>Nguy cơ cao — cần can thiệp</option>
-          <option>Không liên lạc được</option>
+          <option value="green">Ổn định — tiếp tục theo dõi</option>
+          <option value="amber">Cần theo dõi thêm</option>
+          <option value="red">Nguy cơ cao — cần can thiệp</option>
+          <option value="no_contact">Không liên lạc được</option>
         </select></div>
 
       <div class="call-foot">
@@ -65,7 +65,20 @@ function renderCall() {
     </section>`;
 
   $all("[data-copy]").forEach(b => b.addEventListener("click", () => copyNum(b.dataset.copy, b)));
-  $("#btnComplete").addEventListener("click", () => {
+  $("#btnComplete").addEventListener("click", async () => {
+    const btn = $("#btnComplete");
+    btn.disabled = true; btn.textContent = "Đang lưu…";
+    try {
+      await API.post("/his/call-manual/save", {
+        ma_ho_so: p.mrn,
+        outcome: $("#callOutcome").value,
+        note: $("#callNote").value.trim(),
+      });
+    } catch (e) {
+      btn.disabled = false; btn.textContent = "Hoàn tất cuộc gọi";
+      toast("Không lưu được cuộc gọi: " + e.message);
+      return;
+    }
     Metrics.track("call:complete", "Hoàn tất gọi: " + p.name);
     toast("Đã lưu cuộc gọi vào hồ sơ ca.");
     setTimeout(() => location.href = "case.html?id=" + p.mrn, 900);

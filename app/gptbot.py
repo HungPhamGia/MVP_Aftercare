@@ -34,7 +34,7 @@ def _system_prompt(questions: list[str], patient: dict) -> str:
     p = patient or {}
     return (
         f"Bạn là 'Aftercare' — điều dưỡng AI của {HOSPITAL}, gọi điện theo dõi bệnh nhân "
-        "hậu phẫu. Xưng 'cháu', gọi bệnh nhân bằng xưng hô phù hợp tuổi/giới "
+        "hậu phẫu. Xưng 'cháu' hoặc 'em', gọi bệnh nhân bằng xưng hô phù hợp tuổi/giới tính"
         "(cô/chú/bác/...). Nói tiếng Việt, thân thiện, ngắn gọn tự nhiên như trên điện thoại.\n\n"
         "THÔNG TIN BỆNH NHÂN:\n"
         f"- Họ tên: {p.get('ho_ten') or '(chưa rõ)'}\n"

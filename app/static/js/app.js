@@ -77,12 +77,16 @@ function patientPreviewHtml(p) {
   const next = p.nextCall && p.nextCall.status !== "none"
     ? `${esc(p.nextCall.date)} ${esc(p.nextCall.time)} ${callPill(p.nextCall.status)}`
     : `<span class="pill muted">Chưa lên lịch</span>`;
+  // reason/summary share one source (the latest call's AI summary) — one row,
+  // labeled by context, instead of the same text printed twice.
+  const called = !!p.lastContact && p.lastContact !== "Chưa gọi";
+  const noteLbl = (p.escalated || p.risk === "red") ? "Lý do cảnh báo"
+    : called ? "Tóm tắt AI" : "Lý do theo dõi";
   return `
     <div class="pv-head">${riskBadge(p.risk)}<strong>${esc(p.name)}</strong>
       <span class="pv-meta">${p.age} tuổi · ${esc(p.diagnosis)}</span></div>
     <dl class="pv-grid">
-      <dt>Lý do cảnh báo</dt><dd>${esc(p.reason)}</dd>
-      <dt>Tóm tắt AI</dt><dd>${esc(p.summary)}</dd>
+      <dt>${noteLbl}</dt><dd>${esc(p.summary || p.reason)}</dd>
       ${q ? `<dt>Lời bệnh nhân</dt><dd class="pv-quote">${esc(q)}</dd>` : ""}
       <dt>Gọi gần nhất</dt><dd>${esc(p.lastContact)}</dd>
       <dt>Gọi kế tiếp</dt><dd>${next}</dd>

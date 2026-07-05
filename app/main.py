@@ -14,7 +14,7 @@ from app.db import get_db
 from app.models import BenhAn, CallResult, Monitoring, Question, QuestionSet
 from app.questions_gen import CORE, TEMPLATE, ai_suggest_questions, build_question_set
 from app.schemas import (
-    CallDemoIn, ConversationIn, GenerateIn, GhiChuIn, MonitoringIn,
+    CallDemoIn, ConversationIn, GenerateIn, GhiChuIn, ManualCallIn, MonitoringIn,
     PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, ReExamIn, SetVariablesIn,
     SetVariablesOut, TemplateIn, ThuocIn, TtsIn,
 )
@@ -811,6 +811,41 @@ def call_demo_save(body: CallDemoIn, db: Session = Depends(get_db)):
         "escalated": result["escalated"], "call_status": call_status,
         "source": result["source"],
     }
+
+
+_MANUAL_OUTCOMES = {
+    # outcome -> (tier, call_status, default summary)
+    "green": ("green", "completed", "Ổn định — tiếp tục theo dõi."),
+    "amber": ("amber", "completed", "Cần theo dõi thêm."),
+    "red": ("red", "completed", "Nguy cơ cao — cần can thiệp."),
+    "no_contact": (None, "no_answer", "Không liên lạc được với bệnh nhân."),
+}
+
+
+@app.post("/his/call-manual/save")
+def call_manual_save(body: ManualCallIn, db: Session = Depends(get_db)):
+    """A nurse/doctor dialed the patient themselves and picked the outcome —
+    store it as a call_results row (no AI analysis; the human already decided),
+    so the patient's status updates exactly like after an AI call."""
+    get_record_or_404(db, body.ma_ho_so)
+    if body.outcome not in _MANUAL_OUTCOMES:
+        raise HTTPException(422, f"unknown outcome '{body.outcome}'")
+    tier, call_status, default_summary = _MANUAL_OUTCOMES[body.outcome]
+    cr = CallResult(
+        ma_ho_so=body.ma_ho_so,
+        session_id="manual-" + now_utc().strftime("%Y%m%d%H%M%S"),
+        started_at=now_utc(),
+        ended_at=now_utc(),
+        tier=tier,
+        call_status=call_status,
+        summary=(body.note or "").strip() or default_summary,
+        escalated=tier == "red",
+        escalation_channel="Bác sĩ phụ trách" if tier == "red" else None,
+    )
+    db.add(cr)
+    db.commit()
+    db.refresh(cr)
+    return {"call_id": cr.id, "tier": tier, "call_status": call_status}
 
 
 def _patient_questions(db: Session, ma_ho_so: str, rec: BenhAn) -> list[str]:

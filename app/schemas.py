@@ -83,6 +83,13 @@ class CallDemoIn(BaseModel):
     question_set_id: int | None = None
 
 
+# --- Manual call (nurse/doctor dialed themselves, picked the outcome) ---
+class ManualCallIn(BaseModel):
+    ma_ho_so: str
+    outcome: str  # green | amber | red | no_contact
+    note: str = ""
+
+
 # --- Disease question templates (per-disease default set) ---
 class TemplateIn(BaseModel):
     disease: str
