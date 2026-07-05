@@ -73,7 +73,6 @@ const Settings = {
 /* ---- reusable hover preview ------------------------------------------- */
 function patientPreviewHtml(p) {
   if (!p) return "";
-  const q = (typeof QUOTES !== "undefined" && QUOTES[p.mrn]) || "";
   const next = p.nextCall && p.nextCall.status !== "none"
     ? `${esc(p.nextCall.date)} ${esc(p.nextCall.time)} ${callPill(p.nextCall.status)}`
     : `<span class="pill muted">Chưa lên lịch</span>`;
@@ -87,7 +86,6 @@ function patientPreviewHtml(p) {
       <span class="pv-meta">${p.age} tuổi · ${esc(p.diagnosis)}</span></div>
     <dl class="pv-grid">
       <dt>${noteLbl}</dt><dd>${esc(p.summary || p.reason)}</dd>
-      ${q ? `<dt>Lời bệnh nhân</dt><dd class="pv-quote">${esc(q)}</dd>` : ""}
       <dt>Gọi gần nhất</dt><dd>${esc(p.lastContact)}</dd>
       <dt>Gọi kế tiếp</dt><dd>${next}</dd>
     </dl>`;
@@ -205,62 +203,6 @@ function fieldSelect(label, name, options, selected) {
 function fieldInput(label, name, type, value) {
   return `<label class="f"><span>${esc(label)}</span>
     <input class="input" name="${name}" type="${type || "text"}" value="${esc(value || "")}"></label>`;
-}
-
-/* ---- shared AI-call scheduling popup (Manager + Case Detail) -----------
-   Data-source agnostic: pass live `templates`/`conditions` via preset so it
-   works with the API without pulling in any page-specific globals. */
-function openScheduleModal(preset) {
-  preset = preset || {};
-  const CONDS = preset.conditions || (typeof CONDITIONS !== "undefined" ? CONDITIONS : ["Hậu phẫu", "Sản khoa", "Chấn thương chỉnh hình"]);
-  const templates = preset.templates || [];
-  const s = Object.assign({ scope: "Theo bệnh", target: CONDS[0], interval: 7, start: "", count: 5 }, preset);
-  const ivPreset = [3, 7, 14].includes(+s.interval) ? String(s.interval) : "custom";
-  openDrawer(preset.title || "Lên lịch gọi", `
-    ${fieldSelect("Phạm vi", "scope", ["Bệnh nhân cụ thể", "Theo bệnh", "Theo giao thức"], s.scope)}
-    <label class="f"><span id="sbTargetLbl">Đối tượng</span><select class="select" name="target"></select></label>
-    <div class="f"><span>Khoảng lặp</span>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select class="select" name="interval" style="flex:1">
-          <option value="3">Mỗi 3 ngày</option><option value="7">Mỗi 7 ngày</option>
-          <option value="14">Mỗi 14 ngày</option><option value="custom">Tùy chỉnh…</option></select>
-        <input class="input" name="custom" type="number" min="1" value="${+s.interval || 7}" style="width:76px;display:none"></div></div>
-    ${fieldInput("Ngày bắt đầu", "start", "date", s.start)}
-    ${fieldInput("Số lần gọi", "count", "number", s.count)}
-    <div class="f"><span>Các ngày sẽ gọi (tự tính)</span><div id="sbDates" class="computed-dates"></div></div>
-    <div class="drawer-actions"><button class="btn btn-leaf btn-block" id="sbSave">Lưu lịch gọi</button></div>`,
-    box => {
-      const scopeSel = $('[name=scope]', box), target = $('[name=target]', box), intv = $('[name=interval]', box), custom = $('[name=custom]', box);
-      intv.value = ivPreset;
-      const fillTarget = () => {
-        const scope = scopeSel.value;
-        $("#sbTargetLbl", box).textContent = scope === "Bệnh nhân cụ thể" ? "Bệnh nhân" : scope === "Theo bệnh" ? "Nhóm bệnh" : "Giao thức";
-        const opts = scope === "Bệnh nhân cụ thể" ? PATIENTS.map(p => `${p.name} (${p.mrn})`)
-          : scope === "Theo bệnh" ? CONDS : templates.map(t => t.name);
-        target.innerHTML = opts.map(o => `<option ${o === s.target ? "selected" : ""}>${esc(o)}</option>`).join("");
-      };
-      const compute = () => {
-        const iv = intv.value === "custom" ? Math.max(1, +custom.value || 1) : +intv.value;
-        const start = $('[name=start]', box).value, count = Math.max(1, Math.min(12, +$('[name=count]', box).value || 1));
-        if (!start) { $("#sbDates", box).innerHTML = ""; return; }
-        const base = new Date(start + "T00:00:00"); let html = "";
-        for (let k = 0; k < count; k++) { const d = new Date(base); d.setDate(d.getDate() + k * iv);
-          html += `<span class="cd">${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}</span>`; }
-        $("#sbDates", box).innerHTML = html;
-      };
-      custom.style.display = intv.value === "custom" ? "inline-block" : "none";
-      fillTarget(); compute();
-      scopeSel.addEventListener("change", () => { fillTarget(); compute(); });
-      intv.addEventListener("change", () => { custom.style.display = intv.value === "custom" ? "inline-block" : "none"; compute(); });
-      [target, custom, $('[name=start]', box), $('[name=count]', box)].forEach(el => el.addEventListener("change", compute));
-      $("#sbSave", box).addEventListener("click", () => {
-        const data = { scope: scopeSel.value, target: target.value, interval: intv.value === "custom" ? +custom.value : +intv.value,
-          start: $('[name=start]', box).value, count: +$('[name=count]', box).value };
-        Metrics.track("ai_schedule", "Lên lịch gọi AI");
-        if (typeof preset.onSave === "function") preset.onSave(data);
-        closeDrawer(); toast("Đã lưu lịch gọi.");
-      });
-    });
 }
 
 /* friendly page names for the activity log */

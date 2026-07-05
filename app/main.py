@@ -14,9 +14,9 @@ from app.db import get_db
 from app.models import BenhAn, CallResult, Monitoring, Question, QuestionSet
 from app.questions_gen import CORE, TEMPLATE, ai_suggest_questions, build_question_set
 from app.schemas import (
-    CallDemoIn, ConversationIn, GenerateIn, GhiChuIn, ManualCallIn, MonitoringIn,
-    PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, ReExamIn, SetVariablesIn,
-    SetVariablesOut, TemplateIn, ThuocIn, TtsIn,
+    CallDemoIn, CallSettingsIn, ConversationIn, GenerateIn, GhiChuIn, ManualCallIn,
+    MonitoringIn, PatientQuestionSetIn, QuestionSetIn, QuestionsSaveIn, ReExamIn,
+    RuleIn, SetVariablesIn, SetVariablesOut, TemplateIn, ThuocIn, TtsIn,
 )
 
 app = FastAPI(title="AfterCare Web Demo")
@@ -460,14 +460,21 @@ def his_notifications(db: Session = Depends(get_db)):
     mons = monitoring_map(db)
     groups = []
     red = []
+    failed = []
+    fail_reason = {"refused": "bệnh nhân từ chối", "no_answer": "không có câu trả lời"}
     for r in recs.values():
         mon = mons.get(r.ma_ho_so)
         cr = _current(crs.get(r.ma_ho_so), mon.resolved_at if mon else None)
         if cr and (cr.tier == "red" or cr.escalated):
             red.append({"ma_ho_so": r.ma_ho_so,
                         "text": f"{r.ho_ten} — nguy cơ cao ({cr.summary or 'cần bác sĩ xem'})"})
+        if cr and cr.call_status in fail_reason:
+            failed.append({"ma_ho_so": r.ma_ho_so,
+                           "text": f"{r.ho_ten} — gọi thất bại ({fail_reason[cr.call_status]})"})
     if red:
         groups.append({"group": "Bệnh nhân nguy cơ cao", "tone": "red", "items": red})
+    if failed:
+        groups.append({"group": "Gọi thất bại", "tone": "amber", "items": failed})
 
     overdue = []
     for m in db.scalars(select(Monitoring).where(Monitoring.next_call_at < now_utc())).all():
@@ -532,6 +539,69 @@ def his_escalation_rules(db: Session = Depends(get_db)):
         "FROM escalation_rules ORDER BY order_index, id"
     )).mappings().all()
     return [dict(r) for r in rows]
+
+
+def _rule_params(body: RuleIn) -> dict:
+    return {"n": body.name, "a": body.active, "w": body.when_text, "r": body.risk,
+            "rec": json.dumps(body.recipients, ensure_ascii=False),
+            "aa": json.dumps(body.auto_appt, ensure_ascii=False), "ap": body.approval}
+
+
+@app.post("/his/escalation-rules")
+def create_escalation_rule(body: RuleIn, db: Session = Depends(get_db)):
+    new_id = db.execute(
+        text("INSERT INTO escalation_rules "
+             "(name, active, when_text, risk, recipients, auto_appt, approval, order_index) "
+             "VALUES (:n, :a, :w, :r, CAST(:rec AS JSONB), CAST(:aa AS JSONB), :ap, "
+             " COALESCE((SELECT MAX(order_index) + 1 FROM escalation_rules), 1)) "
+             "RETURNING id"),
+        _rule_params(body),
+    ).scalar()
+    db.commit()
+    return {"id": new_id}
+
+
+@app.put("/his/escalation-rules/{rid}")
+def update_escalation_rule(rid: int, body: RuleIn, db: Session = Depends(get_db)):
+    res = db.execute(
+        text("UPDATE escalation_rules SET name = :n, active = :a, when_text = :w, "
+             "risk = :r, recipients = CAST(:rec AS JSONB), auto_appt = CAST(:aa AS JSONB), "
+             "approval = :ap WHERE id = :id"),
+        {**_rule_params(body), "id": rid},
+    )
+    if res.rowcount == 0:
+        raise HTTPException(404, f"rule {rid} not found")
+    db.commit()
+    return {"id": rid}
+
+
+@app.delete("/his/escalation-rules/{rid}")
+def delete_escalation_rule(rid: int, db: Session = Depends(get_db)):
+    res = db.execute(text("DELETE FROM escalation_rules WHERE id = :id"), {"id": rid})
+    if res.rowcount == 0:
+        raise HTTPException(404, f"rule {rid} not found")
+    db.commit()
+    return {"deleted": rid}
+
+
+@app.get("/his/call-settings")
+def get_call_settings(db: Session = Depends(get_db)):
+    """AI-call operating config (working hours / retry / blackout days) —
+    one JSONB row in app_settings; empty dict until first saved."""
+    v = db.execute(text(
+        "SELECT value FROM app_settings WHERE key = 'call_settings'")).scalar()
+    return v or {}
+
+
+@app.put("/his/call-settings")
+def put_call_settings(body: CallSettingsIn, db: Session = Depends(get_db)):
+    db.execute(
+        text("INSERT INTO app_settings (key, value) VALUES ('call_settings', CAST(:v AS JSONB)) "
+             "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"),
+        {"v": json.dumps(body.model_dump(), ensure_ascii=False)},
+    )
+    db.commit()
+    return body.model_dump()
 
 
 @app.get("/his/patient/{ma_ho_so}/call-preview")

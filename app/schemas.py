@@ -90,6 +90,24 @@ class ManualCallIn(BaseModel):
     note: str = ""
 
 
+# --- Escalation rules (Giao thức & cảnh báo) ---
+class RuleIn(BaseModel):
+    name: str
+    active: bool = True
+    when_text: str = ""
+    risk: str = "amber"  # red | amber | green
+    recipients: list[str] = []
+    auto_appt: dict[str, Any] = {}
+    approval: bool = False
+
+
+# --- AI call settings (working hours / retry / blackout days) ---
+class CallSettingsIn(BaseModel):
+    working_hours: dict[str, Any] = {}
+    retry: dict[str, Any] = {}
+    blackout: list[str] = []
+
+
 # --- Disease question templates (per-disease default set) ---
 class TemplateIn(BaseModel):
     disease: str

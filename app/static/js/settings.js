@@ -112,14 +112,15 @@ function renderLoginBanner() {
 }
 
 function openReport() {
-  openDrawer("Báo lỗi / Góp ý", `
+  openDrawer("Báo lỗi / Góp ý (mô phỏng)", `
     ${fieldSelect("Loại", "kind", ["Báo lỗi", "Góp ý cải thiện", "Câu hỏi"], "Báo lỗi")}
     <label class="f"><span>Nội dung</span><textarea class="input" name="msg" rows="5" placeholder="Mô tả vấn đề hoặc góp ý của bạn…"></textarea></label>
+    <p class="muted-note">Bản demo: phản hồi chỉ được ghi nhận cục bộ, chưa gửi đi đâu.</p>
     <div class="drawer-actions"><button class="btn btn-leaf btn-block" id="sendReport">Gửi</button></div>`,
     box => $("#sendReport", box).addEventListener("click", () => {
       const msg = $('[name=msg]', box).value.trim();
       if (!msg) { toast("Nhập nội dung trước khi gửi."); return; }
-      closeDrawer(); Metrics.track("report", "Gửi phản hồi"); toast("Đã gửi phản hồi tới AfterCare. Cảm ơn bạn!");
+      closeDrawer(); Metrics.track("report", "Gửi phản hồi"); toast("Đã ghi nhận phản hồi (mô phỏng).");
     }));
 }
 

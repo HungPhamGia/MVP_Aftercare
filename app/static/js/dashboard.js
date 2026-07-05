@@ -22,9 +22,11 @@ function upcomingCalls() {
 }
 
 function dashActions() {
-  const od = overdueList().length;
+  // mirror what the notifications tab lists: red-risk + failed calls + overdue
+  const n = PATIENTS.filter(p => p.risk === "red" || p.escalated).length
+          + failedCalls().length + overdueList().length;
   $("#dashActions").innerHTML = `
-    <a class="btn" href="manager.html#notifications">Thông báo${od ? ` · ${od}` : ""}</a>
+    <a class="btn" href="manager.html#notifications">Thông báo${n ? ` · ${n}` : ""}</a>
     <a class="btn btn-leaf" href="manager.html#calendar">Quản lý gọi AI</a>`;
 }
 

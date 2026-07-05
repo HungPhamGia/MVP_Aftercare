@@ -47,12 +47,10 @@ const RISK = {
   green:   { label: "Ổn định",      short: "Ổn định" },
   unknown: { label: "Chưa đánh giá", short: "Chưa gọi" },
 };
+/* next-call pill states — mapNextCall only ever produces these two */
 const CALL_STATUS = {
-  scheduled:   { label: "Đã lên lịch", tone: "info" },
-  completed:   { label: "Đã gọi xong", tone: "green" },
-  failed:      { label: "Quá hạn gọi", tone: "red" },
-  in_progress: { label: "Đang gọi",     tone: "amber" },
-  none:        { label: "Chưa lên lịch", tone: "muted" },
+  scheduled: { label: "Đã lên lịch", tone: "info" },
+  none:      { label: "Chưa lên lịch", tone: "muted" },
 };
 
 /* Filled at runtime from /his/patients by api.js (single source of truth). */

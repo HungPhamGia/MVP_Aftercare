@@ -30,13 +30,17 @@ const MS = {
   _drag: null,
 };
 
-/* Build MS from live data (templates/rules/performance/notifications + the
-   week grid from monitoring next-call times). Reschedules persist via
-   PUT /records/{mrn}/monitoring; other edits stay client-side. */
+/* Build MS from live data (templates/rules/performance/notifications/settings
+   + the week grid from monitoring next-call times). Reschedules persist via
+   PUT /records/{mrn}/monitoring; rules and call settings via their own APIs. */
 async function hydrateManager() {
-  const [tpls, rules, perf, notifs] = await Promise.all([
+  const [tpls, rules, perf, notifs, cs] = await Promise.all([
     AfterCare.templates(), AfterCare.rules(), AfterCare.performance(), AfterCare.notifications(),
+    API.get("/his/call-settings").catch(() => ({})),
   ]);
+  if (cs && cs.working_hours && cs.working_hours.start) MS.workingHours = cs.working_hours;
+  if (cs && cs.retry && cs.retry.afterMin != null) MS.retry = cs.retry;
+  if (cs && Array.isArray(cs.blackout)) MS.blackout = cs.blackout;
   MS.templates = tpls || [];
   MS.selTpl = MS.templates[0] ? MS.templates[0].id : null;
   MS.rules = (rules || []).map(r => ({
@@ -370,9 +374,13 @@ function openCallSettings() {
         $('[name=boDate]', box).value = ""; $('[name=boNote]', box).value = "";
         renderBO();
       });
-      $("#csSave", box).addEventListener("click", () => {
+      $("#csSave", box).addEventListener("click", async () => {
         w.start = $('[name=whStart]', box).value; w.end = $('[name=whEnd]', box).value;
         MS.retry.afterMin = +$('[name=rtMin]', box).value; MS.retry.maxAttempts = +$('[name=rtMax]', box).value;
+        try {
+          await API.put("/his/call-settings",
+            { working_hours: MS.workingHours, retry: MS.retry, blackout: MS.blackout });
+        } catch (e) { toast("Lưu thất bại: " + e.message); return; }
         Metrics.track("ai_config", "Lưu cài đặt lịch gọi"); closeDrawer(); toast("Đã lưu cài đặt lịch gọi.");
       });
     });
@@ -419,13 +427,34 @@ function renderRuleList() {
         <button class="btn btn-sm btn-danger" data-rdel="${i}">Xóa</button>
       </div>
     </div>`).join("");
-  $all("[data-ron]").forEach(el => el.addEventListener("change", () => { MS.rules[+el.dataset.ron].active = el.checked; toast(el.checked ? "Đã bật quy tắc." : "Đã tắt quy tắc."); }));
-  $all("[data-redit]").forEach(el => el.addEventListener("click", () => openRule(+el.dataset.redit)));
-  $all("[data-rdup]").forEach(el => el.addEventListener("click", () => {
-    const c = clone(MS.rules[+el.dataset.rdup]); c.name += " (bản sao)"; c.id = "r" + Date.now();
-    MS.rules.push(c); renderRuleList(); toast("Đã nhân bản quy tắc.");
+  $all("[data-ron]").forEach(el => el.addEventListener("change", async () => {
+    const r = MS.rules[+el.dataset.ron]; r.active = el.checked;
+    try {
+      await API.put("/his/escalation-rules/" + r.id, rulePayload(r));
+      toast(el.checked ? "Đã bật quy tắc." : "Đã tắt quy tắc.");
+    } catch (e) { toast("Lưu thất bại: " + e.message); }
   }));
-  $all("[data-rdel]").forEach(el => el.addEventListener("click", () => { MS.rules.splice(+el.dataset.rdel, 1); renderRuleList(); toast("Đã xóa quy tắc."); }));
+  $all("[data-redit]").forEach(el => el.addEventListener("click", () => openRule(+el.dataset.redit)));
+  $all("[data-rdup]").forEach(el => el.addEventListener("click", async () => {
+    const c = clone(MS.rules[+el.dataset.rdup]); c.name += " (bản sao)";
+    try {
+      c.id = (await API.post("/his/escalation-rules", rulePayload(c))).id;
+      MS.rules.push(c); renderRuleList(); toast("Đã nhân bản quy tắc.");
+    } catch (e) { toast("Lưu thất bại: " + e.message); }
+  }));
+  $all("[data-rdel]").forEach(el => el.addEventListener("click", async () => {
+    const i = +el.dataset.rdel;
+    try {
+      await API.del("/his/escalation-rules/" + MS.rules[i].id);
+      MS.rules.splice(i, 1); renderRuleList(); toast("Đã xóa quy tắc.");
+    } catch (e) { toast("Xóa thất bại: " + e.message); }
+  }));
+}
+
+/* MS rule (camelCase) → API body (matches escalation_rules columns) */
+function rulePayload(r) {
+  return { name: r.name, active: !!r.active, when_text: r.when || "", risk: r.risk,
+           recipients: r.recipients || [], auto_appt: r.autoAppt || {}, approval: !!r.approval };
 }
 function openRule(idx) {
   const editing = idx !== null;
@@ -443,10 +472,10 @@ function openRule(idx) {
     ${fieldSelect("Trong vòng", "within", ["24 giờ", "48 giờ", "72 giờ", "1 tuần"], r.autoAppt.within || "24 giờ")}
     <label class="check"><input type="checkbox" name="approval" ${r.approval ? "checked" : ""}> Cần bác sĩ duyệt trước khi thực hiện</label>
     <div class="drawer-actions"><button class="btn btn-leaf btn-block" id="ruleSave">${editing ? "Lưu thay đổi" : "Thêm giao thức"}</button></div>`,
-    box => $("#ruleSave", box).addEventListener("click", () => {
+    box => $("#ruleSave", box).addEventListener("click", async () => {
       const riskMap = { "Nguy cơ cao": "red", "Cần theo dõi": "amber", "Ổn định": "green" };
       const data = {
-        id: r.id || ("r" + Date.now()), active: r.active !== false,
+        id: r.id, active: r.active !== false,
         name: $('[name=name]', box).value.trim() || "Giao thức mới",
         when: $('[name=when]', box).value.trim() || "—",
         risk: riskMap[$('[name=risk]', box).value],
@@ -454,6 +483,10 @@ function openRule(idx) {
         autoAppt: { on: $('[name=autoOn]', box).checked, specialty: $('[name=spec]', box).value, within: $('[name=within]', box).value },
         approval: $('[name=approval]', box).checked,
       };
+      try {
+        if (editing) await API.put("/his/escalation-rules/" + data.id, rulePayload(data));
+        else data.id = (await API.post("/his/escalation-rules", rulePayload(data))).id;
+      } catch (e) { toast("Lưu thất bại: " + e.message); return; }
       if (editing) MS.rules[idx] = data; else MS.rules.push(data);
       closeDrawer(); renderRuleList(); toast(editing ? "Đã lưu giao thức." : "Đã thêm giao thức.");
     }));
