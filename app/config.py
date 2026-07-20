@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     SMARTVOICE_BASE_URL: str = "https://api.idg.vnpt.vn"
     # TTS voice: region (female_north|female_north_ngochoa|female_central|
     # female_south|male_north|male_central|male_south) and read speed [0.5-2].
-    SMARTVOICE_TTS_REGION: str = "female_north"
+    SMARTVOICE_TTS_REGION: str = "female_north_ngochoa"
     SMARTVOICE_TTS_SPEED: str = "1"
     SMARTVOICE_STT_ACCESS_TOKEN: str = ""
     SMARTVOICE_STT_TOKEN_ID: str = ""

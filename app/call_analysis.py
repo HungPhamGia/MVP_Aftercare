@@ -136,7 +136,7 @@ def _gpt(transcript: list[dict], questions: list[dict] | None = None) -> dict:
 
 # "Ổn định" là kết luận cần bằng chứng: phải trả lời được ít nhất nửa số câu
 # dự kiến thì green mới đứng vững. Ít hơn → amber (gọi lại); 0 câu → no_answer.
-GREEN_MIN_COVERAGE = 0.5
+GREEN_MIN_COVERAGE = 0.8
 
 
 def _coverage_guard(result: dict, questions: list[dict] | None) -> dict:

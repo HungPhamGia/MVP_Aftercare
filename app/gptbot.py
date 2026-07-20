@@ -35,7 +35,7 @@ def _address(patient: dict | None) -> tuple[str, str]:
         return "cháu", "cô" if nu else "chú"
     if tuoi >= 18:
         return "em", "chị" if nu else "anh"
-    return "chị", "em"  # bệnh nhi / vị thành niên
+    return "chị", "em"  
 
 
 def opening(patient: dict | None = None) -> str:
@@ -57,6 +57,7 @@ OPENING_VARIANTS = list(dict.fromkeys(
     opening({"tuoi": t, "gioi_tinh": g})
     for t, g in ((65, "Nam"), (45, "Nam"), (45, "Nữ"), (30, "Nam"), (30, "Nữ"), (None, ""))
 ))
+
 
 
 def _system_prompt(questions: list[str], patient: dict) -> str:
@@ -133,7 +134,7 @@ def converse(
         return {"text": line, "handoff": False, "done": False}
 
     if not settings.OPENAI_API_KEY:
-        # Stub so the Voicebot view works without an OpenAI key.
+        # Stub so the Voicebot view works without an OpenAI  key.
         return {
             "text": f"[GPT chưa cấu hình] Bạn vừa nói: “{text}”",
             "handoff": False, "done": False,
