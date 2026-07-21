@@ -124,30 +124,42 @@ function avatarInitials(name) {
   return ((w[0][0] || "") + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase();
 }
 
-/* ---- sidebar ---------------------------------------------------------- */
+/* ---- sidebar -----------------------------------------------------------
+   Desktop: a slim icon rail that expands on hover/focus to show labels
+   (see .sidebar-rail in style.css). Clicking an item always navigates —
+   the hover state only controls whether the label text is visible.
+   Mobile (<=980px): unchanged full-width slide-over, opened via .nav-fab. */
 function renderSidebar() {
   const aside = $(".sidebar");
   if (!aside) return;
   const current = document.body.dataset.page;
   aside.innerHTML = `
-    <div class="brand">
-      <a href="index.html" aria-label="AfterCare"><img src="images/aftercare-logo.jpg" alt="AfterCare"></a>
-      <button class="menu-button" type="button" data-nav-close aria-label="Menu">&#9776;</button>
-    </div>
-    <nav class="nav" aria-label="Điều hướng">
-      ${NAV_GROUPS.map(g => `
-        <div class="nav-group">
-          <div class="nav-group-label">${esc(g.label)}</div>
-          ${g.items.map(it => `
-            <a class="nav-item${it.page === current ? " active" : ""}" href="${it.href}"
-               ${it.page === current ? 'aria-current="page"' : ""}>${esc(it.label)}</a>`).join("")}
-        </div>`).join("")}
-    </nav>
-    <div class="sidebar-spacer"></div>
-    <a class="sidebar-profile" href="settings.html" title="Chỉnh sửa hồ sơ">
-      <div class="avatar">${esc(CURRENT_USER.initials)}</div>
-      <div><strong>${esc(CURRENT_USER.name)}</strong><span>${esc(CURRENT_USER.role)}</span></div>
-    </a>`;
+    <div class="sidebar-rail">
+      <div class="brand">
+        <a class="brand-link" href="index.html" aria-label="AfterCare">
+          <span class="brand-mark">AC</span>
+          <img class="brand-full" src="images/aftercare-logo.jpg" alt="AfterCare">
+        </a>
+        <button class="menu-button" type="button" data-nav-close aria-label="Đóng menu">&#9776;</button>
+      </div>
+      <nav class="nav" aria-label="Điều hướng">
+        ${NAV_GROUPS.map(g => `
+          <div class="nav-group">
+            <div class="nav-group-label">${esc(g.label)}</div>
+            ${g.items.map(it => `
+              <a class="nav-item${it.page === current ? " active" : ""}" href="${it.href}"
+                 ${it.page === current ? 'aria-current="page"' : ""} title="${esc(it.label)}">
+                <span class="ni-ico">${NAV_ICONS[it.page] || ""}</span>
+                <span class="ni-label">${esc(it.label)}</span>
+              </a>`).join("")}
+          </div>`).join("")}
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <a class="sidebar-profile" href="settings.html" title="Chỉnh sửa hồ sơ">
+        <div class="avatar">${esc(CURRENT_USER.initials)}</div>
+        <div class="sp-text"><strong>${esc(CURRENT_USER.name)}</strong><span>${esc(CURRENT_USER.role)}</span></div>
+      </a>
+    </div>`;
 }
 
 /* ---- responsive slide-over -------------------------------------------- */
@@ -208,7 +220,7 @@ function fieldInput(label, name, type, value) {
 /* friendly page names for the activity log */
 function pageLabel(page) {
   for (const g of NAV_GROUPS) { const f = g.items.find(i => i.page === page); if (f) return f.label; }
-  return ({ case: "Chi tiết ca", call: "Màn hình cuộc gọi" })[page] || page;
+  return ({ case: "Chi tiết ca", call: "Màn hình cuộc gọi", templates: "Bộ câu hỏi theo bệnh" })[page] || page;
 }
 
 /* ---- boot ------------------------------------------------------------- */

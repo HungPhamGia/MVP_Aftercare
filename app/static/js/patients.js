@@ -134,6 +134,8 @@ function render() {
 
 AfterCare.ready(() => {
   renderFilters();
+  const qParam = new URLSearchParams(location.search).get("q");
+  if (qParam) { PSTATE.q = qParam.trim().toLowerCase(); const fq = $("#fq"); if (fq) fq.value = qParam; }
   $all("#viewToggle button").forEach(b => b.addEventListener("click", () => {
     $all("#viewToggle button").forEach(x => x.classList.remove("active"));
     b.classList.add("active"); PSTATE.view = b.dataset.view; render();

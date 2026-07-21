@@ -22,7 +22,7 @@ const MS = {
   retry: { afterMin: 30, maxAttempts: 3 },
   blackout: [],
   upcoming: [],
-  templates: [], rules: [], notifications: [], performance: null,
+  templates: [], rules: [], performance: null,
   calView: "week",
   calAnchor: CAL_TODAY,
   selTpl: null,
@@ -34,8 +34,8 @@ const MS = {
    + the week grid from monitoring next-call times). Reschedules persist via
    PUT /records/{mrn}/monitoring; rules and call settings via their own APIs. */
 async function hydrateManager() {
-  const [tpls, rules, perf, notifs, cs] = await Promise.all([
-    AfterCare.templates(), AfterCare.rules(), AfterCare.performance(), AfterCare.notifications(),
+  const [tpls, rules, perf, cs] = await Promise.all([
+    AfterCare.templates(), AfterCare.rules(), AfterCare.performance(),
     API.get("/his/call-settings").catch(() => ({})),
   ]);
   if (cs && cs.working_hours && cs.working_hours.start) MS.workingHours = cs.working_hours;
@@ -49,10 +49,6 @@ async function hydrateManager() {
     autoAppt: r.auto_appt || { on: false, specialty: "", within: "" },
   }));
   MS.performance = perf;
-  MS.notifications = (notifs || []).map(g => ({
-    group: g.group, tone: g.tone,
-    items: (g.items || []).map(it => ({ mrn: it.ma_ho_so, text: it.text, action: "Mở ca" })),
-  }));
   MS.byDate = {};
   MS.upcoming = [];
   PATIENTS.filter(p => p.nextCall.iso)
@@ -68,10 +64,10 @@ async function hydrateManager() {
 }
 
 const TABS = [
-  { id: "calendar",      label: "Lịch gọi AI",      render: renderCalendar },
-  { id: "protocols",     label: "Giao thức & cảnh báo", render: renderRules },
-  { id: "performance",   label: "Hiệu suất AI",     render: renderPerformance },
-  { id: "notifications", label: "Thông báo",        render: renderNotifications },
+  { id: "calendar",    label: "Lịch gọi AI",          render: renderCalendar },
+  { id: "questions",   label: "Bộ câu hỏi",           render: renderQuestionsTab },
+  { id: "protocols",   label: "Giao thức & cảnh báo", render: renderRules },
+  { id: "performance", label: "Hiệu suất AI",         render: renderPerformance },
 ];
 
 function activeTab() {
@@ -80,11 +76,8 @@ function activeTab() {
 }
 function renderTabs() {
   const cur = activeTab();
-  const failed = MS.notifications.find(g => g.group.includes("thất bại"));
-  const fc = failed ? failed.items.length : 0;
   $("#mtabs").innerHTML = TABS.map(t => `
-    <button class="mtab ${t.id === cur ? "active" : ""}" data-tab="${t.id}">${esc(t.label)}
-      ${t.id === "notifications" && fc ? `<span class="badge red" style="padding:1px 7px">${fc}</span>` : ""}</button>`).join("");
+    <button class="mtab ${t.id === cur ? "active" : ""}" data-tab="${t.id}">${esc(t.label)}</button>`).join("");
   $all("#mtabs .mtab").forEach(b => b.addEventListener("click", () => { location.hash = b.dataset.tab; }));
 }
 function route() { renderTabs(); TABS.find(t => t.id === activeTab()).render(); }
@@ -118,8 +111,8 @@ function renderCalendar() {
         <div class="cal-toolbar">
           <div class="cal-nav">
             <button class="icon-btn" id="calPrev" aria-label="Trước">‹</button>
-            <button class="icon-btn" id="calNext" aria-label="Sau">›</button>
             <button class="btn btn-sm" id="calToday">Hôm nay</button>
+            <button class="icon-btn" id="calNext" aria-label="Sau">›</button>
             <strong class="cal-period">${esc(calPeriodLabel())}</strong>
           </div>
           <div class="segmented" id="calSeg">
@@ -387,9 +380,10 @@ function openCallSettings() {
 }
 
 /* =========================================================================
-   Question templates: moved to a dedicated page (templates.html / templates.js).
-   MS.templates is still loaded in hydrateManager — the scheduler's "Theo bệnh"
-   target list reads template names.
+   Question templates: rendered by templates.js (see renderQuestionsTab()
+   below) — reused as-is, mounted into the "Bộ câu hỏi" tab instead of its
+   own page. MS.templates is still loaded in hydrateManager — the
+   scheduler's "Theo bệnh" target list reads template names.
    ========================================================================= */
 
 /* =========================================================================
@@ -533,36 +527,19 @@ function renderPerformance() {
 }
 
 /* =========================================================================
-   5) Notification Center
+   5) Bộ câu hỏi (per-disease question templates) — reuses templates.js,
+   which used to live on its own page. It renders into #tplRoot; here we
+   just create that mount point inside the tab and (re)hydrate T.list from
+   the API the first time the tab is opened, then let templates.js's own
+   render()/loadTemplates()/etc. take over exactly as they did standalone.
    ========================================================================= */
-function renderNotifications() {
-  $("#managerView").innerHTML = `<div class="mcard"><div class="h-row"><h3>Trung tâm thông báo</h3></div><div id="notifList"></div></div>`;
-  renderNotifList();
-}
-function renderNotifList() {
-  const el = $("#notifList");
-  const total = MS.notifications.reduce((n, g) => n + g.items.length, 0);
-  if (!total) { el.innerHTML = `<div class="empty">Không có thông báo nào.</div>`; return; }
-  el.innerHTML = MS.notifications.filter(g => g.items.length).map((g, gi) => `
-    <div class="notif-group">
-      <div class="g-head"><span class="dot ${g.tone}"></span><h4>${esc(g.group)}</h4>
-        <span class="badge ${g.tone === "red" ? "red" : g.tone === "amber" ? "amber" : "green"}" style="padding:1px 8px">${g.items.length}</span></div>
-      ${g.items.map((it, ii) => `<div class="notif-item">
-        <span class="grow">${esc(it.text)}</span>
-        ${it.action ? `<button class="btn btn-sm" data-na="${gi}:${ii}">${esc(it.action)}</button>` : ""}
-        <button class="btn btn-sm btn-danger" data-nd="${gi}:${ii}">Bỏ qua</button></div>`).join("")}
-    </div>`).join("");
-
-  $all("[data-na]").forEach(b => b.addEventListener("click", () => {
-    const [gi, ii] = b.dataset.na.split(":").map(Number);
-    const it = MS.notifications[gi].items[ii];
-    if (it.action === "Xem lịch") location.href = "appointments.html";
-    else if (it.mrn) openCase(it.mrn);
-  }));
-  $all("[data-nd]").forEach(b => b.addEventListener("click", () => {
-    const [gi, ii] = b.dataset.nd.split(":").map(Number);
-    MS.notifications[gi].items.splice(ii, 1); renderNotifList(); renderTabs(); toast("Đã bỏ qua thông báo.");
-  }));
+async function renderQuestionsTab() {
+  $("#managerView").innerHTML = `<div id="tplRoot"></div>`;
+  if (!T.list.length) {
+    try { await loadTemplates(false); }
+    catch (e) { toast("Không tải được bộ câu hỏi: " + e.message); }
+  }
+  render();
 }
 
 /* ---- boot ------------------------------------------------------------- */

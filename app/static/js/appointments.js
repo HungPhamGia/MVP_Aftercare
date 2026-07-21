@@ -70,8 +70,8 @@ function renderToolbar() {
   $("#apToolbar").innerHTML = `
     <div class="ap-nav">
       <button class="icon-btn" id="apPrev" aria-label="Trước">‹</button>
-      <button class="icon-btn" id="apNext" aria-label="Sau">›</button>
       <button class="btn btn-sm" id="apToday">Hôm nay</button>
+      <button class="icon-btn" id="apNext" aria-label="Sau">›</button>
       <strong class="ap-period">${esc(periodLabel())}</strong>
       <div class="segmented" id="apSeg" style="margin-left:6px">
         <button data-v="day" class="${AS.view === "day" ? "active" : ""}">Ngày</button>

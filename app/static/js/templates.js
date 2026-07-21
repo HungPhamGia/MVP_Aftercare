@@ -157,9 +157,14 @@ async function deleteTemplate() {
   } catch (e) { toast("Xóa thất bại: " + e.message); }
 }
 
-/* ---- boot ------------------------------------------------------------- */
-document.addEventListener("DOMContentLoaded", async () => {
-  try { await loadTemplates(false); }
-  catch (e) { toast("Không tải được bộ câu hỏi: " + e.message); }
-  render();
-});
+/* ---- boot --------------------------------------------------------------
+   Only self-boot on the standalone page (templates.html). When this file
+   is loaded inside manager.html, manager.js's "Bộ câu hỏi" tab calls
+   loadTemplates()/render() itself once that tab becomes active. */
+if (document.body.dataset.page === "templates") {
+  document.addEventListener("DOMContentLoaded", async () => {
+    try { await loadTemplates(false); }
+    catch (e) { toast("Không tải được bộ câu hỏi: " + e.message); }
+    render();
+  });
+}

@@ -21,13 +21,76 @@ function upcomingCalls() {
     .sort((a, b) => String(a.nextCall.iso).localeCompare(String(b.nextCall.iso)));
 }
 
-function dashActions() {
-  // mirror what the notifications tab lists: red-risk + failed calls + overdue
-  const n = PATIENTS.filter(p => p.risk === "red" || p.escalated).length
-          + failedCalls().length + overdueList().length;
-  $("#dashActions").innerHTML = `
-    <a class="btn" href="manager.html#notifications">Thông báo${n ? ` · ${n}` : ""}</a>
+const ICON_SEARCH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7.2"/><path d="M21 21l-4.4-4.4"/></svg>`;
+const ICON_BELL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.2a6 6 0 0112 0c0 4.1 1.5 5.6 2 6.6H4c.5-1 2-2.5 2-6.6z"/><path d="M9.5 17.3a2.5 2.5 0 005 0"/></svg>`;
+
+let DASH_NOTIFS = [];  // grouped notifications from /his/notifications, loaded once in boot
+
+function notifCount() { return DASH_NOTIFS.reduce((n, g) => n + (g.items || []).length, 0); }
+
+function renderTopbar() {
+  $("#topBar").innerHTML = `
+    <label class="ph-search">
+      <span class="ts-ico">${ICON_SEARCH}</span>
+      <input type="search" id="topSearch" placeholder="Tìm bệnh nhân theo tên hoặc mã hồ sơ…">
+    </label>
+    <div class="notif-wrap">
+      <button class="notif-btn" id="notifBtn" type="button" aria-haspopup="true" aria-expanded="false">
+        <span class="nb-ico">${ICON_BELL}</span><span class="nb-word">Thông báo</span>
+        <span class="nb-count" id="nbCount" hidden>0</span>
+      </button>
+      <div class="notif-panel" id="notifPanel" hidden></div>
+    </div>
     <a class="btn btn-leaf" href="manager.html#calendar">Quản lý gọi AI</a>`;
+
+  const search = $("#topSearch");
+  const goSearch = () => {
+    const q = search.value.trim();
+    location.href = "patients.html" + (q ? "?q=" + encodeURIComponent(q) : "");
+  };
+  search.addEventListener("keydown", e => { if (e.key === "Enter") goSearch(); });
+
+  wireNotifBell();
+  renderNotifBadge();
+}
+
+function notifIcon(tone) { return tone === "red" ? "!" : tone === "amber" ? "●" : "✓"; }
+
+function renderNotifBadge() {
+  const n = notifCount();
+  const c = $("#nbCount");
+  c.hidden = !n; c.textContent = n;
+}
+
+function renderNotifPanel() {
+  const panel = $("#notifPanel");
+  const groups = DASH_NOTIFS.filter(g => (g.items || []).length);
+  panel.innerHTML = `
+    <div class="np-head"><strong>Thông báo</strong>${notifCount() ? `<span class="pill red" style="padding:1px 8px">${notifCount()}</span>` : ""}</div>
+    <div class="np-list">
+      ${groups.length ? groups.map(g => `
+        <div class="np-group">
+          <div class="np-gtitle">${esc(g.group)}</div>
+          ${g.items.map((it, ii) => `
+            <button class="np-item" data-tone="${g.tone}" data-mrn="${esc(it.ma_ho_so || "")}">
+              <span class="np-dot ${g.tone}">${notifIcon(g.tone)}</span>
+              <span class="np-body"><span class="np-text">${esc(it.text)}</span></span>
+            </button>`).join("")}
+        </div>`).join("") : `<div class="np-empty">Không có thông báo nào.</div>`}
+    </div>`;
+  $all(".np-item[data-mrn]", panel).forEach(b => {
+    if (!b.dataset.mrn) return;
+    b.addEventListener("click", () => openCase(b.dataset.mrn));
+  });
+}
+
+function wireNotifBell() {
+  const btn = $("#notifBtn"), panel = $("#notifPanel");
+  const close = () => { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  const open = () => { renderNotifPanel(); panel.hidden = false; btn.setAttribute("aria-expanded", "true"); };
+  btn.addEventListener("click", e => { e.stopPropagation(); panel.hidden ? open() : close(); });
+  document.addEventListener("click", e => { if (!panel.hidden && !e.target.closest(".notif-wrap")) close(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
 }
 
 function quickCounts(appts) {
@@ -134,5 +197,6 @@ function wireBoard() {
 AfterCare.ready(async () => {
   let appts = [];
   try { appts = await AfterCare.appointments(); } catch (e) { console.warn("[dashboard] appointments", e); }
-  dashActions(); quickCounts(appts); renderBoard(appts);
+  try { DASH_NOTIFS = await AfterCare.notifications(); } catch (e) { console.warn("[dashboard] notifications", e); }
+  renderTopbar(); quickCounts(appts); renderBoard(appts);
 });

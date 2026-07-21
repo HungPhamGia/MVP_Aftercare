@@ -43,14 +43,6 @@ function render() {
     </section>
 
     <section class="set-card">
-      <h3>Hỗ trợ tiếp cận</h3>
-      <div class="set-row"><div class="grow"><div class="rl">Tương phản cao</div><div class="rd">Tăng độ rõ của đường viền và chữ</div></div>
-        <label class="toggle"><input type="checkbox" id="sContrast" ${S.highContrast ? "checked" : ""}><span class="track"></span></label></div>
-      <div class="set-row"><div class="grow"><div class="rl">Giảm chuyển động</div><div class="rd">Tắt hiệu ứng động cho người nhạy cảm</div></div>
-        <label class="toggle"><input type="checkbox" id="sMotion" ${S.reduceMotion ? "checked" : ""}><span class="track"></span></label></div>
-    </section>
-
-    <section class="set-card">
       <h3>Trợ giúp &amp; phản hồi</h3>
       <button class="help-link" data-help="faq"><span class="grow">Câu hỏi thường gặp (FAQ)</span><span>›</span></button>
       <div class="help-body" id="help-faq" hidden>
@@ -67,6 +59,14 @@ function render() {
         <p>Hỗ trợ kỹ thuật: <b>1900 9999</b> · Email: <b>hotro@aftercare.vn</b> (8:00–20:00 hằng ngày).</p>
       </div>
       <button class="help-link" id="reportBtn"><span class="grow">Báo lỗi / Góp ý</span><span>›</span></button>
+    </section>
+
+    <section class="set-card">
+      <h3>Hỗ trợ tiếp cận</h3>
+      <div class="set-row"><div class="grow"><div class="rl">Tương phản cao</div><div class="rd">Tăng độ rõ của đường viền và chữ</div></div>
+        <label class="toggle"><input type="checkbox" id="sContrast" ${S.highContrast ? "checked" : ""}><span class="track"></span></label></div>
+      <div class="set-row"><div class="grow"><div class="rl">Giảm chuyển động</div><div class="rd">Tắt hiệu ứng động cho người nhạy cảm</div></div>
+        <label class="toggle"><input type="checkbox" id="sMotion" ${S.reduceMotion ? "checked" : ""}><span class="track"></span></label></div>
     </section>`;
 
   renderLoginBanner();
