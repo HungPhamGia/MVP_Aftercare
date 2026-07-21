@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Question generation (optional — falls back to a template draft if unset)
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-5.4-mini-2026-03-17"
 
     # Smartbot BFF (optional — BFF returns a stub reply if unset)
     SMARTBOT_URL: str = "https://assistant-stream.vnpt.vn/v1/conversation"
