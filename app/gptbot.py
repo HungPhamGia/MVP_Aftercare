@@ -18,7 +18,7 @@ from app.config import settings
 # session_id -> {"messages": [ ... chat history ... ]}
 _SESSIONS: dict[str, dict] = {}
 
-HOSPITAL = "bệnh viện X"  # ponytail: placeholder, set when a real hospital signs on
+HOSPITAL = "bệnh viện"  # ponytail: placeholder, set when a real hospital signs on
 
 def _address(patient: dict | None) -> tuple[str, str]:
     """Cặp xưng hô (bot tự xưng, gọi bệnh nhân) khoá theo tuổi + giới tính —
