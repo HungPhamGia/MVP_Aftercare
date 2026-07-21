@@ -29,6 +29,21 @@ def health():
     return {"status": "ok"}
 
 
+def _vn_date(d) -> str:
+    """Spoken Vietnamese date for the bot/TTS: 'ngày 10 tháng 7 năm 2026'.
+    Raw ISO '2026-07-10' gets read backwards (year first) with '-' as 'trừ'."""
+    if not d:
+        return ""
+    try:
+        return f"ngày {d.day} tháng {d.month} năm {d.year}"
+    except AttributeError:  # already a string (e.g. text column) — reformat if ISO
+        try:
+            y, m, day = str(d)[:10].split("-")
+            return f"ngày {int(day)} tháng {int(m)} năm {y}"
+        except ValueError:
+            return str(d)
+
+
 def now_utc() -> datetime:
     """Aware UTC timestamps for the timestamptz columns. Naive now_utc()
     depends on the server's local clock — the local (UTC+7) machine and Render
@@ -944,8 +959,8 @@ def bff_conversation(body: ConversationIn, db: Session = Depends(get_db)):
             "tuoi": rec.tuoi,
             "bac_si_phu_trach": rec.bac_si_phu_trach or "",
             "phau_thuat": rec.phau_thuat or "",
-            "ngay_xuat_vien": str(rec.ngay_xuat_vien) if rec.ngay_xuat_vien else "",
-            "lich_tai_kham": str(rec.lich_tai_kham) if rec.lich_tai_kham else "",
+            "ngay_xuat_vien": _vn_date(rec.ngay_xuat_vien),
+            "lich_tai_kham": _vn_date(rec.lich_tai_kham),
         },
     )
 
