@@ -13,6 +13,8 @@
 ![VNPT](https://img.shields.io/badge/VNPT-SmartVoice_STT%2FTTS-blue)
 ![Status](https://img.shields.io/badge/status-MVP%20demo-orange)
 
+**Tiếng Việt** | [English](README.en.md)
+
 </div>
 
 Bệnh nhân hậu phẫu về nhà thường "mất dấu" cho đến kỳ tái khám. **AfterCare** lấp khoảng trống đó:
